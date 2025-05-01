@@ -3,6 +3,7 @@ import MainLayout from '@/components/layout/MainLayout';
 import TelegramConnect from '@/components/telegram/TelegramConnect';
 import TelegramGroupList from '@/components/telegram/TelegramGroupList';
 import SignalParser from '@/components/telegram/SignalParser';
+import AddGroupDialog from '@/components/telegram/AddGroupDialog';
 import { telegramGroups } from '@/data/sampleData';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
@@ -10,11 +11,23 @@ import { useToast } from '@/hooks/use-toast';
 const TelegramPage = () => {
   const { toast } = useToast();
   const [groups, setGroups] = useState(telegramGroups);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
-  const handleAddGroup = () => {
+  const handleAddGroup = ({ name, url }: { name: string; url: string }) => {
+    const newGroup = {
+      id: `group-${Date.now()}`,
+      name,
+      active: true,
+      memberCount: 0,
+      signalsCount: 0,
+      lastSignal: "N/A",
+    };
+    
+    setGroups([...groups, newGroup]);
+    
     toast({
-      title: "Feature not implemented",
-      description: "Group adding functionality will be available in the next update",
+      title: "Grupo adicionado",
+      description: `O grupo ${name} foi adicionado com sucesso`,
     });
   };
 
@@ -24,8 +37,8 @@ const TelegramPage = () => {
     ));
     
     toast({
-      title: active ? "Group activated" : "Group deactivated",
-      description: `Group has been ${active ? 'activated' : 'deactivated'} successfully`,
+      title: active ? "Grupo ativado" : "Grupo desativado",
+      description: `Grupo foi ${active ? 'ativado' : 'desativado'} com sucesso`,
     });
   };
   
@@ -33,23 +46,23 @@ const TelegramPage = () => {
     setGroups(groups.filter(group => group.id !== id));
     
     toast({
-      title: "Group removed",
-      description: "The group has been removed successfully",
+      title: "Grupo removido",
+      description: "O grupo foi removido com sucesso",
     });
   };
 
   return (
     <MainLayout>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Telegram Integration</h1>
-        <p className="text-muted-foreground">Connect and configure your Telegram signal sources</p>
+        <h1 className="text-2xl font-bold">Integração com Telegram</h1>
+        <p className="text-muted-foreground">Conecte e configure suas fontes de sinais do Telegram</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <TelegramConnect />
         <TelegramGroupList 
           groups={groups}
-          onAddGroup={handleAddGroup}
+          onAddGroup={() => setIsAddDialogOpen(true)}
           onToggleGroup={handleToggleGroup}
           onRemoveGroup={handleRemoveGroup}
         />
@@ -58,6 +71,12 @@ const TelegramPage = () => {
       <div className="mb-6">
         <SignalParser />
       </div>
+
+      <AddGroupDialog 
+        open={isAddDialogOpen} 
+        onOpenChange={setIsAddDialogOpen}
+        onAddGroup={handleAddGroup}
+      />
     </MainLayout>
   );
 };
