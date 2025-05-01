@@ -15,6 +15,7 @@ import {
 import { Database, BarChart, MessageSquare, Settings, ChevronRight, PlusCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
+import ConnectionStatus from './ConnectionStatus';
 
 const AppSidebar = () => {
   return (
@@ -104,13 +105,7 @@ const AppSidebar = () => {
       </SidebarContent>
       
       <SidebarFooter className="p-4">
-        <div className="p-3 rounded-lg bg-sidebar-accent">
-          <h4 className="text-sm font-medium mb-1">System Status</h4>
-          <div className="flex items-center text-xs">
-            <span className="h-2 w-2 rounded-full bg-profit mr-2"></span>
-            <span className="opacity-90">Online - Monitoring</span>
-          </div>
-        </div>
+        <ConnectionStatus />
       </SidebarFooter>
     </Sidebar>
   );
