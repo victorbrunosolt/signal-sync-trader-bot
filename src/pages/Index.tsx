@@ -56,8 +56,8 @@ const Index = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ActivePositions positions={activePositions} />
-        <RecentSignals signals={recentSignals} />
+        <ActivePositions positions={activePositions as any} />
+        <RecentSignals signals={recentSignals as any} />
       </div>
     </MainLayout>
   );

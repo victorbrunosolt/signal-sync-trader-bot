@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
-interface Position {
+export interface Position {
   id: string;
   symbol: string;
   type: 'LONG' | 'SHORT';
