@@ -3,16 +3,28 @@ import MainLayout from '@/components/layout/MainLayout';
 import StatsCard from '@/components/dashboard/StatsCard';
 import TradingStats from '@/components/dashboard/TradingStats';
 import PerformanceChart from '@/components/dashboard/PerformanceChart';
-import ActivePositions from '@/components/dashboard/ActivePositions';
-import RecentSignals from '@/components/dashboard/RecentSignals';
+import ActivePositions, { Position } from '@/components/dashboard/ActivePositions';
+import RecentSignals, { Signal } from '@/components/dashboard/RecentSignals';
 import { useToast } from '@/hooks/use-toast';
 import { isConnectedToBybit } from '@/services/bybitService';
 import { useState, useEffect } from 'react';
-import { performanceData, activePositions, recentSignals, tradingStats } from '@/data/sampleData';
+import { performanceData, activePositions as positionsData, recentSignals as signalsData, tradingStats } from '@/data/sampleData';
 
 const Index = () => {
   const { toast } = useToast();
   const [isConnected, setIsConnected] = useState(false);
+  
+  // Cast sample data to proper types
+  const activePositions: Position[] = positionsData.map(pos => ({
+    ...pos,
+    type: pos.type as 'LONG' | 'SHORT'
+  }));
+  
+  const recentSignals: Signal[] = signalsData.map(sig => ({
+    ...sig,
+    type: sig.type as 'LONG' | 'SHORT',
+    status: sig.status as 'EXECUTED' | 'PENDING' | 'REJECTED'
+  }));
 
   useEffect(() => {
     // Check if connected to Bybit
