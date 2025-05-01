@@ -8,6 +8,7 @@ import RecentSignals from '@/components/dashboard/RecentSignals';
 import { useToast } from '@/hooks/use-toast';
 import { isConnectedToBybit } from '@/services/bybitService';
 import { useState, useEffect } from 'react';
+import { performanceData, activePositions, recentSignals, tradingStats } from '@/data/sampleData';
 
 const Index = () => {
   const { toast } = useToast();
@@ -32,23 +33,45 @@ const Index = () => {
       <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <StatsCard title="Lucro Diário" value="+$127.53" change="+22.5%" isPositive={true} />
-        <StatsCard title="Win Rate" value="68%" change="+5%" isPositive={true} />
-        <StatsCard title="Sinais Hoje" value="12" change="-3" isPositive={false} />
+        <StatsCard 
+          title="Lucro Diário" 
+          value={"+$127.53"}
+          change={{value: "+22.5%", positive: true}} 
+        />
+        <StatsCard 
+          title="Win Rate" 
+          value={"68%"}
+          change={{value: "+5%", positive: true}} 
+        />
+        <StatsCard 
+          title="Sinais Hoje" 
+          value={"12"}
+          change={{value: "-3", positive: false}} 
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         <div className="lg:col-span-2">
-          <PerformanceChart />
+          <PerformanceChart 
+            title="Performance" 
+            data={performanceData}
+            tooltipFormatter={(value) => `$${value.toFixed(2)}`}
+          />
         </div>
-        <TradingStats />
+        <TradingStats 
+          winRate={tradingStats.winRate}
+          profitFactor={tradingStats.profitFactor}
+          averageWin={tradingStats.averageWin}
+          averageLoss={tradingStats.averageLoss}
+          tradesCount={tradingStats.tradesCount}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
-          <ActivePositions />
+          <ActivePositions positions={activePositions} />
         </div>
-        <RecentSignals />
+        <RecentSignals signals={recentSignals} />
       </div>
     </MainLayout>
   );

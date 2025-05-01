@@ -9,7 +9,7 @@ interface ChartData {
   value: number;
 }
 
-interface PerformanceChartProps {
+export interface PerformanceChartProps {
   title: string;
   data: {
     daily: ChartData[];
@@ -20,19 +20,25 @@ interface PerformanceChartProps {
   tooltipFormatter?: (value: number) => string;
 }
 
-const PerformanceChart = ({ title, data, tooltipFormatter }: PerformanceChartProps) => {
+const PerformanceChart = ({ title = "Performance", data, tooltipFormatter }: PerformanceChartProps) => {
   const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('weekly');
   
   const getChartData = () => {
+    if (!data) {
+      return [];
+    }
+    
     switch(timeframe) {
       case 'daily':
-        return data.daily;
+        return data.daily || [];
       case 'weekly':
-        return data.weekly;
+        return data.weekly || [];
       case 'monthly':
-        return data.monthly;
+        return data.monthly || [];
       case 'yearly':
-        return data.yearly;
+        return data.yearly || [];
+      default:
+        return [];
     }
   };
 

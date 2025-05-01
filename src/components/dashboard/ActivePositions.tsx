@@ -14,11 +14,11 @@ export interface Position {
   pnlPercentage: number;
 }
 
-interface ActivePositionsProps {
+export interface ActivePositionsProps {
   positions: Position[];
 }
 
-const ActivePositions = ({ positions }: ActivePositionsProps) => {
+const ActivePositions = ({ positions = [] }: ActivePositionsProps) => {
   return (
     <Card>
       <CardHeader className="pb-3">
