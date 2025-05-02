@@ -43,7 +43,7 @@ const TELEGRAM_PARSER_CONFIG_KEY = 'telegramParserConfig';
 const BACKEND_API_URL = 'http://localhost:3000/api/telegram';
 
 // Initialize from localStorage
-export const initFromLocalStorage = (): void => {
+export const initFromLocalStorage = (): TelegramConfig => {
   if (typeof window !== 'undefined') {
     try {
       const savedConfig = localStorage.getItem(TELEGRAM_CONFIG_KEY);
@@ -64,7 +64,7 @@ export const initFromLocalStorage = (): void => {
 };
 
 // Telegram configuration
-let telegramConfig = initFromLocalStorage();
+let telegramConfig: TelegramConfig = initFromLocalStorage();
 
 // Check if connected to Telegram
 export const isConnectedToTelegram = (): boolean => {
