@@ -7,13 +7,14 @@ import { useToast } from '@/hooks/use-toast';
 import { Shield, Eye, EyeOff } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { setCredentials, isConnectedToBybit, getExchangeEnvironment } from '@/services/bybitService';
 
 const APIConnect = () => {
   const { toast } = useToast();
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
   const [showSecret, setShowSecret] = useState(false);
-  const [isTestnet, setIsTestnet] = useState(false);
+  const [isTestnet, setIsTestnet] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   
@@ -21,12 +22,18 @@ const APIConnect = () => {
   useEffect(() => {
     const savedSettings = localStorage.getItem('bybitApiSettings');
     if (savedSettings) {
-      const settings = JSON.parse(savedSettings);
-      setApiKey(settings.apiKey || '');
-      setApiSecret(settings.apiSecret || '');
-      setIsTestnet(settings.isTestnet || false);
-      setIsConnected(settings.isConnected || false);
+      try {
+        const settings = JSON.parse(savedSettings);
+        setApiKey(settings.apiKey || '');
+        setApiSecret(settings.apiSecret || '');
+        setIsTestnet(settings.isTestnet || true);
+        setIsConnected(settings.isConnected || false);
+      } catch (error) {
+        console.error('Error parsing saved settings:', error);
+      }
     }
+    
+    setIsConnected(isConnectedToBybit());
   }, []);
 
   const handleConnect = () => {
@@ -41,19 +48,9 @@ const APIConnect = () => {
 
     setIsConnecting(true);
     
-    // In a real-world implementation, you would verify the connection 
-    // with Bybit API here. For now, we'll simulate it.
-    setTimeout(() => {
-      // Save credentials to localStorage (in production, a more secure method would be better)
-      const settings = {
-        apiKey,
-        apiSecret,
-        isTestnet,
-        isConnected: true,
-        connectedAt: new Date().toISOString()
-      };
-      
-      localStorage.setItem('bybitApiSettings', JSON.stringify(settings));
+    try {
+      // Set credentials in the service
+      setCredentials(apiKey, apiSecret, isTestnet);
       
       setIsConnected(true);
       setIsConnecting(false);
@@ -62,7 +59,15 @@ const APIConnect = () => {
         title: "Successfully connected",
         description: `Your Bybit account has been linked (${isTestnet ? 'Testnet' : 'Mainnet'} mode)`,
       });
-    }, 1500);
+    } catch (error) {
+      console.error('Error connecting to Bybit:', error);
+      toast({
+        title: "Connection error",
+        description: "Failed to connect to Bybit API",
+        variant: "destructive",
+      });
+      setIsConnecting(false);
+    }
   };
 
   const handleDisconnect = () => {
@@ -95,6 +100,9 @@ const APIConnect = () => {
       const settings = JSON.parse(localStorage.getItem('bybitApiSettings') || '{}');
       settings.isTestnet = checked;
       localStorage.setItem('bybitApiSettings', JSON.stringify(settings));
+      
+      // Re-set credentials with new testnet value
+      setCredentials(apiKey, apiSecret, checked);
       
       toast({
         title: "Network changed",

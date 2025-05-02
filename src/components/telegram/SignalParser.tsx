@@ -1,12 +1,12 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import axios from 'axios';
+import { getParserConfig, saveParserConfig, testParseTemplate, ParserConfig } from '@/services/telegramService';
 
 const SignalParser = () => {
   const { toast } = useToast();
@@ -19,21 +19,20 @@ const SignalParser = () => {
   const [useRegex, setUseRegex] = useState(false);
   const [parseResult, setParseResult] = useState<any>(null);
   const [isTesting, setIsTesting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    // Load config on component mount
+    const config = getParserConfig();
+    setTemplate(config.template);
+    setUseRegex(config.useRegex);
+  }, []);
 
   const handleTestParse = async () => {
     setIsTesting(true);
     
     try {
-      // In a real implementation, this would call a backend API to test the template
-      // against the test signal
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Extract data using the template pattern
-      // This is a simplified implementation - in a real app, you'd likely
-      // use a more sophisticated parser on the backend
-      
-      // Simulated parsing result
-      const result = parseSignalWithTemplate(testSignal, template);
+      const result = await testParseTemplate(template, testSignal, useRegex);
       setParseResult(result);
       
       toast({
@@ -53,42 +52,15 @@ const SignalParser = () => {
     }
   };
 
-  // Simple parsing function to demonstrate functionality
-  const parseSignalWithTemplate = (signal: string, template: string) => {
-    // This is a very simplified implementation
-    // In a real app, this would be more robust and handle regex
-    
-    if (useRegex) {
-      // Placeholder for regex implementation
-      return {
-        pair: 'BTCUSDT',
-        type: 'LONG',
-        entry: '65400-65800',
-        tp: ['66500', '67200', '68000'],
-        sl: '64000',
-      };
-    }
-    
-    // Simple parsing for demonstration
-    const pairMatch = signal.match(/#(\w+)/);
-    const typeMatch = signal.match(/Type:\s*(\w+)/);
-    const entryMatch = signal.match(/Entry:\s*([0-9\-]+)/);
-    const tpMatch = signal.match(/TP:\s*([\d\s,.]+)/);
-    const slMatch = signal.match(/SL:\s*(\d+)/);
-    
-    return {
-      pair: pairMatch ? pairMatch[1] : null,
-      type: typeMatch ? typeMatch[1] : null,
-      entry: entryMatch ? entryMatch[1] : null,
-      tp: tpMatch ? tpMatch[1].split(',').map(s => s.trim()) : [],
-      sl: slMatch ? slMatch[1] : null,
-    };
-  };
-
   const handleSaveTemplate = async () => {
+    setIsSaving(true);
     try {
-      // In a real implementation, this would save the template to your backend
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const config: ParserConfig = {
+        template,
+        useRegex
+      };
+      
+      await saveParserConfig(config);
       
       toast({
         title: "Template saved",
@@ -101,6 +73,8 @@ const SignalParser = () => {
         description: "Could not save your template",
         variant: "destructive",
       });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -162,8 +136,9 @@ const SignalParser = () => {
             <Button 
               variant="outline" 
               onClick={handleSaveTemplate}
+              disabled={isSaving}
             >
-              Save Template
+              {isSaving ? 'Saving...' : 'Save Template'}
             </Button>
           </div>
           

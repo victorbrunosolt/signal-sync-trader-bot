@@ -10,6 +10,23 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchAccountBalance, fetchActivePositions, fetchPerformanceData, fetchTradingStats } from '@/services/bybitService';
 import { useToast } from '@/hooks/use-toast';
 
+interface StatsCardProps {
+  title: string;
+  value: string;
+  description: string;
+}
+
+interface TradingStatsProps {
+  statisticsData: {
+    winRate: number;
+    profitFactor: number;
+    averageWin: number;
+    averageLoss: number;
+    tradesCount: number;
+  };
+  isLoading: boolean;
+}
+
 const Index = () => {
   const { toast } = useToast();
   const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
@@ -34,7 +51,7 @@ const Index = () => {
 
   // React Query for active positions
   const { 
-    data: positions = [],
+    data: positionsData = [],
     isLoading: isPositionsLoading 
   } = useQuery({
     queryKey: ['activePositions'],
@@ -86,6 +103,18 @@ const Index = () => {
     }
   });
 
+  // Convert positions to the format expected by ActivePositions component
+  const positions = positionsData.map(pos => ({
+    id: pos.id || `pos-${pos.symbol}-${Date.now()}`,
+    symbol: pos.symbol,
+    type: pos.side === 'Buy' ? 'LONG' : 'SHORT',
+    entryPrice: pos.entryPrice,
+    currentPrice: pos.markPrice,
+    size: pos.size,
+    pnl: pos.pnl,
+    pnlPercentage: pos.roe
+  }));
+
   return (
     <MainLayout>
       <div className="mb-6">
@@ -97,25 +126,21 @@ const Index = () => {
         <StatsCard
           title="Account Balance"
           value={isBalanceLoading ? "Loading..." : `$${balance?.toFixed(2) || '0.00'}`}
-          trend={3.2}
           description="Total account equity"
         />
         <StatsCard
           title="Open Positions"
           value={isPositionsLoading ? "Loading..." : positions.length.toString()}
-          trend={0}
           description="Currently active trades"
         />
         <StatsCard
           title="Win Rate"
           value={isStatsLoading ? "Loading..." : `${tradingStats?.winRate.toFixed(1) || '0.0'}%`}
-          trend={1.8}
           description="Last 30 days"
         />
         <StatsCard
           title="Profit Factor"
           value={isStatsLoading ? "Loading..." : tradingStats?.profitFactor.toFixed(2) || '0.00'}
-          trend={-0.5}
           description="Total winners / total losers"
         />
       </div>
@@ -135,7 +160,7 @@ const Index = () => {
         </div>
         <div>
           <TradingStats
-            stats={tradingStats || {
+            statisticsData={tradingStats || {
               winRate: 0,
               profitFactor: 0,
               averageWin: 0,
@@ -148,8 +173,8 @@ const Index = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ActivePositions positions={positions || []} isLoading={isPositionsLoading} />
-        <RecentSignals signals={[]} isLoading={false} />
+        <ActivePositions positions={positions} />
+        <RecentSignals signals={[]} />
       </div>
     </MainLayout>
   );

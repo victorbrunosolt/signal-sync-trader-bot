@@ -1,8 +1,10 @@
+
 import axios from 'axios';
 import CryptoJS from 'crypto-js';
 
 // Types
 export interface Position {
+  id: string;
   symbol: string;
   side: 'Buy' | 'Sell';
   size: number;
@@ -13,6 +15,8 @@ export interface Position {
   status: 'Active';
   type: 'Isolated';
   leverage: number;
+  currentPrice: number;
+  pnlPercentage: number;
 }
 
 export interface Signal {
@@ -65,16 +69,60 @@ export interface OrderRequest {
 const BASE_URL = 'https://api.bybit.com';
 const TESTNET_URL = 'https://api-testnet.bybit.com';
 
-// Use testnet for development
-const API_URL = TESTNET_URL;
-
-// Credentials - in a real app, these would come from environment variables or user input
+// Credentials storage
 let API_KEY = '';
 let API_SECRET = '';
+let IS_TESTNET = true;
+let IS_CONNECTED = false;
 
-export const setCredentials = (apiKey: string, apiSecret: string) => {
+export const setCredentials = (apiKey: string, apiSecret: string, isTestnet: boolean = true) => {
   API_KEY = apiKey;
   API_SECRET = apiSecret;
+  IS_TESTNET = isTestnet;
+  IS_CONNECTED = true;
+  
+  // Save to localStorage
+  const settings = {
+    apiKey,
+    apiSecret,
+    isTestnet,
+    isConnected: true,
+    connectedAt: new Date().toISOString()
+  };
+  
+  localStorage.setItem('bybitApiSettings', JSON.stringify(settings));
+};
+
+// Check if connected
+export const isConnectedToBybit = (): boolean => {
+  if (!IS_CONNECTED && typeof window !== 'undefined') {
+    // Check localStorage
+    try {
+      const settings = JSON.parse(localStorage.getItem('bybitApiSettings') || '{}');
+      if (settings.isConnected && settings.apiKey && settings.apiSecret) {
+        API_KEY = settings.apiKey;
+        API_SECRET = settings.apiSecret;
+        IS_TESTNET = settings.isTestnet || false;
+        IS_CONNECTED = true;
+      }
+    } catch (error) {
+      console.error('Error checking connection status:', error);
+    }
+  }
+  return IS_CONNECTED;
+};
+
+// Get environment
+export const getExchangeEnvironment = (): string => {
+  if (!isConnectedToBybit()) {
+    return 'Not Connected';
+  }
+  return IS_TESTNET ? 'Testnet' : 'Mainnet';
+};
+
+// Get API URL
+const getApiUrl = () => {
+  return IS_TESTNET ? TESTNET_URL : BASE_URL;
 };
 
 // Sign request for authenticated endpoints
@@ -109,26 +157,28 @@ const getHeaders = (data: any = {}) => {
 
 // API Methods
 export const fetchAccountBalance = async (): Promise<number> => {
+  if (!isConnectedToBybit()) {
+    throw new Error('Not connected to Bybit');
+  }
+  
   try {
-    // For demo purposes, return a mock balance
-    // In a real implementation, you would call the Bybit API
-    return 10250.75;
-    
-    /* Real implementation would be something like:
     const endpoint = '/v5/account/wallet-balance';
     const params = { accountType: 'UNIFIED' };
     
     const response = await axios.get(
-      `${API_URL}${endpoint}`,
+      `${getApiUrl()}${endpoint}`,
       { 
         params,
         headers: getHeaders(params)
       }
     );
     
-    const balance = response.data.result.list[0].totalEquity;
-    return parseFloat(balance);
-    */
+    if (response.data?.retCode === 0 && response.data?.result?.list?.length > 0) {
+      const balance = response.data.result.list[0].totalEquity;
+      return parseFloat(balance);
+    }
+    
+    return 0;
   } catch (error) {
     console.error('Error fetching account balance:', error);
     throw new Error('Failed to fetch account balance');
@@ -136,61 +186,41 @@ export const fetchAccountBalance = async (): Promise<number> => {
 };
 
 export const fetchActivePositions = async (): Promise<Position[]> => {
+  if (!isConnectedToBybit()) {
+    throw new Error('Not connected to Bybit');
+  }
+  
   try {
-    // For demo purposes, return mock positions
-    // In a real implementation, you would call the Bybit API
-    return [
-      {
-        symbol: 'BTCUSDT',
-        side: 'Buy',
-        size: 0.01,
-        entryPrice: 65400,
-        markPrice: 66200,
-        pnl: 8,
-        roe: 1.22,
-        status: 'Active',
-        type: 'Isolated',
-        leverage: 10
-      },
-      {
-        symbol: 'ETHUSDT',
-        side: 'Sell',
-        size: 0.15,
-        entryPrice: 3450,
-        markPrice: 3420,
-        pnl: 4.5,
-        roe: 0.87,
-        status: 'Active',
-        type: 'Isolated',
-        leverage: 10
-      }
-    ];
-    
-    /* Real implementation would be something like:
     const endpoint = '/v5/position/list';
     const params = { category: 'linear', settleCoin: 'USDT' };
     
     const response = await axios.get(
-      `${API_URL}${endpoint}`,
+      `${getApiUrl()}${endpoint}`,
       { 
         params,
         headers: getHeaders(params)
       }
     );
     
-    return response.data.result.list.map(pos => ({
-      symbol: pos.symbol,
-      side: pos.side,
-      size: parseFloat(pos.size),
-      entryPrice: parseFloat(pos.entryPrice),
-      markPrice: parseFloat(pos.markPrice),
-      pnl: parseFloat(pos.unrealisedPnl),
-      roe: parseFloat(pos.roe) * 100,
-      status: 'Active',
-      type: pos.positionType,
-      leverage: parseFloat(pos.leverage)
-    }));
-    */
+    if (response.data?.retCode === 0) {
+      return response.data.result.list.map((pos: any) => ({
+        id: `${pos.symbol}-${pos.side}-${Date.now()}`,
+        symbol: pos.symbol,
+        side: pos.side,
+        size: parseFloat(pos.size),
+        entryPrice: parseFloat(pos.entryPrice),
+        markPrice: parseFloat(pos.markPrice),
+        currentPrice: parseFloat(pos.markPrice),
+        pnl: parseFloat(pos.unrealisedPnl),
+        pnlPercentage: parseFloat(pos.roe) * 100,
+        roe: parseFloat(pos.roe) * 100,
+        status: 'Active',
+        type: 'Isolated',
+        leverage: parseFloat(pos.leverage)
+      }));
+    }
+    
+    return [];
   } catch (error) {
     console.error('Error fetching active positions:', error);
     throw new Error('Failed to fetch active positions');
@@ -198,69 +228,129 @@ export const fetchActivePositions = async (): Promise<Position[]> => {
 };
 
 export const fetchTradingStats = async (): Promise<TradingStats> => {
+  if (!isConnectedToBybit()) {
+    throw new Error('Not connected to Bybit');
+  }
+  
   try {
-    // For demo purposes, return mock stats
-    // In a real implementation, you would calculate this from API data
-    return {
-      winRate: 62.5,
-      profitFactor: 1.87,
-      averageWin: 45.30,
-      averageLoss: 28.50,
-      tradesCount: 32
-    };
-    
-    /* Real implementation would fetch closed orders and calculate stats
     const endpoint = '/v5/execution/list';
     const params = { category: 'linear', limit: 100 };
     
     const response = await axios.get(
-      `${API_URL}${endpoint}`,
+      `${getApiUrl()}${endpoint}`,
       { 
         params,
         headers: getHeaders(params)
       }
     );
     
-    // Process trades to calculate stats
-    const trades = response.data.result.list;
-    // ... calculate win rate, profit factor, etc.
-    */
+    if (response.data?.retCode === 0) {
+      const trades = response.data.result.list || [];
+      
+      // Calculate trading statistics
+      let wins = 0;
+      let losses = 0;
+      let totalWinAmount = 0;
+      let totalLossAmount = 0;
+      
+      trades.forEach((trade: any) => {
+        const pnl = parseFloat(trade.closedPnl || '0');
+        if (pnl > 0) {
+          wins++;
+          totalWinAmount += pnl;
+        } else if (pnl < 0) {
+          losses++;
+          totalLossAmount += Math.abs(pnl);
+        }
+      });
+      
+      const totalTrades = trades.length;
+      const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
+      const profitFactor = totalLossAmount > 0 ? totalWinAmount / totalLossAmount : wins > 0 ? 999 : 0;
+      const averageWin = wins > 0 ? totalWinAmount / wins : 0;
+      const averageLoss = losses > 0 ? totalLossAmount / losses : 0;
+      
+      return {
+        winRate,
+        profitFactor,
+        averageWin,
+        averageLoss,
+        tradesCount: totalTrades
+      };
+    }
+    
+    return {
+      winRate: 0,
+      profitFactor: 0,
+      averageWin: 0,
+      averageLoss: 0,
+      tradesCount: 0
+    };
   } catch (error) {
     console.error('Error fetching trading stats:', error);
     throw new Error('Failed to fetch trading stats');
   }
 };
 
-export const fetchPerformanceData = async (timeframe: 'daily' | 'weekly' | 'monthly'): Promise<PerformanceData> => {
+export const fetchPerformanceData = async (timeframe: 'daily' | 'weekly' | 'monthly' | 'yearly'): Promise<PerformanceData> => {
+  if (!isConnectedToBybit()) {
+    throw new Error('Not connected to Bybit');
+  }
+  
   try {
-    // For demo purposes, return mock performance data
-    // In a real implementation, you would fetch this from your backend
-    // which would aggregate data from the exchange API
+    // In a production app, you'd likely have an endpoint to fetch historical balance data
+    // For now, we'll create synthetic data based on the current balance
     
+    const currentBalance = await fetchAccountBalance();
     let performanceData: PerformanceData = {
-      daily: Array.from({ length: 24 }, (_, i) => ({
-        name: `${i}:00`,
-        value: 10000 + Math.random() * 500 * (Math.random() > 0.5 ? 1 : -1)
-      })),
-      weekly: Array.from({ length: 7 }, (_, i) => {
-        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        return {
-          name: days[i],
-          value: 10000 + Math.random() * 1000 * (Math.random() > 0.5 ? 1 : -1)
-        };
-      }),
-      monthly: Array.from({ length: 30 }, (_, i) => ({
-        name: `${i+1}`,
-        value: 10000 + Math.random() * 2000 * (Math.random() > 0.5 ? 1 : -1)
-      })),
-      yearly: Array.from({ length: 12 }, (_, i) => {
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        return {
-          name: months[i],
-          value: 10000 + Math.random() * 5000 * (Math.random() > 0.5 ? 1 : -1)
-        };
-      })
+      daily: [],
+      weekly: [],
+      monthly: [],
+      yearly: []
     };
+    
+    // Get date values
+    const now = new Date();
+    const currentDay = now.getDate();
+    const currentMonth = now.getMonth();
+    
+    // Generate daily data (24 hours)
+    performanceData.daily = Array.from({ length: 24 }, (_, i) => {
+      const variance = (Math.random() * 0.05) * (Math.random() > 0.5 ? 1 : -1);
+      return {
+        name: `${i}:00`,
+        value: currentBalance * (1 + variance)
+      };
+    });
+    
+    // Generate weekly data (7 days)
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    performanceData.weekly = Array.from({ length: 7 }, (_, i) => {
+      const variance = (Math.random() * 0.1) * (Math.random() > 0.5 ? 1 : -1);
+      return {
+        name: days[i],
+        value: currentBalance * (1 + variance)
+      };
+    });
+    
+    // Generate monthly data (30 days)
+    performanceData.monthly = Array.from({ length: 30 }, (_, i) => {
+      const variance = (Math.random() * 0.2) * (Math.random() > 0.5 ? 1 : -1);
+      return {
+        name: `${i+1}`,
+        value: currentBalance * (1 + variance)
+      };
+    });
+    
+    // Generate yearly data (12 months)
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    performanceData.yearly = Array.from({ length: 12 }, (_, i) => {
+      const variance = (Math.random() * 0.5) * (Math.random() > 0.5 ? 1 : -1);
+      return {
+        name: months[i],
+        value: currentBalance * (1 + variance)
+      };
+    });
     
     return performanceData;
   } catch (error) {
@@ -270,41 +360,54 @@ export const fetchPerformanceData = async (timeframe: 'daily' | 'weekly' | 'mont
 };
 
 export const placeOrder = async (orderDetails: OrderRequest): Promise<any> => {
+  if (!isConnectedToBybit()) {
+    throw new Error('Not connected to Bybit');
+  }
+  
   try {
-    // For demo purposes, return a mock response
-    // In a real implementation, you would call the Bybit API
-    return {
-      success: true,
-      orderId: `order-${Date.now()}`,
-      status: 'Created'
-    };
-    
-    /* Real implementation would be something like:
     const endpoint = '/v5/order/create';
     
     const response = await axios.post(
-      `${API_URL}${endpoint}`,
+      `${getApiUrl()}${endpoint}`,
       orderDetails,
       { headers: getHeaders(orderDetails) }
     );
     
-    return response.data.result;
-    */
+    if (response.data?.retCode === 0) {
+      return response.data.result;
+    } else {
+      throw new Error(response.data?.retMsg || 'Unknown error');
+    }
   } catch (error) {
     console.error('Error placing order:', error);
     throw new Error('Failed to place order');
   }
 };
 
-export const cancelOrder = async (orderId: string): Promise<any> => {
+export const cancelOrder = async (orderId: string, symbol: string): Promise<any> => {
+  if (!isConnectedToBybit()) {
+    throw new Error('Not connected to Bybit');
+  }
+  
   try {
-    // For demo purposes, return a mock response
-    return {
-      success: true,
-      status: 'Cancelled'
+    const endpoint = '/v5/order/cancel';
+    const data = {
+      category: 'linear',
+      symbol: symbol,
+      orderId: orderId
     };
     
-    /* Real implementation would call the Bybit API */
+    const response = await axios.post(
+      `${getApiUrl()}${endpoint}`,
+      data,
+      { headers: getHeaders(data) }
+    );
+    
+    if (response.data?.retCode === 0) {
+      return response.data.result;
+    } else {
+      throw new Error(response.data?.retMsg || 'Unknown error');
+    }
   } catch (error) {
     console.error('Error cancelling order:', error);
     throw new Error('Failed to cancel order');
@@ -312,11 +415,30 @@ export const cancelOrder = async (orderId: string): Promise<any> => {
 };
 
 export const fetchRecentOrders = async (limit = 10): Promise<any[]> => {
+  if (!isConnectedToBybit()) {
+    throw new Error('Not connected to Bybit');
+  }
+  
   try {
-    // For demo purposes, return mock orders
-    return [];
+    const endpoint = '/v5/order/history';
+    const params = {
+      category: 'linear',
+      limit: limit
+    };
     
-    /* Real implementation would call the Bybit API */
+    const response = await axios.get(
+      `${getApiUrl()}${endpoint}`,
+      { 
+        params,
+        headers: getHeaders(params)
+      }
+    );
+    
+    if (response.data?.retCode === 0) {
+      return response.data.result.list || [];
+    }
+    
+    return [];
   } catch (error) {
     console.error('Error fetching recent orders:', error);
     throw new Error('Failed to fetch recent orders');
@@ -325,6 +447,8 @@ export const fetchRecentOrders = async (limit = 10): Promise<any[]> => {
 
 export default {
   setCredentials,
+  isConnectedToBybit,
+  getExchangeEnvironment,
   fetchAccountBalance,
   fetchActivePositions,
   fetchTradingStats,

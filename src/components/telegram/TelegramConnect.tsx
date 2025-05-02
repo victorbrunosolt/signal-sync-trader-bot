@@ -1,10 +1,11 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import axios from 'axios';
+import { Shield } from 'lucide-react';
+import { initTelegramAuth, confirmTelegramCode, isConnectedToTelegram, getTelegramConfig, disconnectTelegram } from '@/services/telegramService';
 
 const TelegramConnect = () => {
   const { toast } = useToast();
@@ -14,6 +15,19 @@ const TelegramConnect = () => {
   const [verificationCode, setVerificationCode] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [awaitingCode, setAwaitingCode] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+
+  useEffect(() => {
+    // Check if already connected
+    setIsConnected(isConnectedToTelegram());
+    
+    if (isConnectedToTelegram()) {
+      const config = getTelegramConfig();
+      setApiId(config.apiId);
+      setApiHash(config.apiHash);
+      setPhoneNumber(config.phoneNumber);
+    }
+  }, []);
 
   const handleConnect = async () => {
     if (!apiId || !apiHash || !phoneNumber) {
@@ -28,18 +42,15 @@ const TelegramConnect = () => {
     setIsConnecting(true);
     
     try {
-      // Simulating the first step of Telegram authentication
-      // In a real implementation, this would make an API call to your backend
-      // which would handle the actual Telegram API interaction
+      const result = await initTelegramAuth(apiId, apiHash, phoneNumber);
       
-      // For demonstration purposes, we're simulating the API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      setAwaitingCode(true);
-      toast({
-        title: "Code sent",
-        description: "Please check your Telegram app for the verification code",
-      });
+      if (result.awaitingCode) {
+        setAwaitingCode(true);
+        toast({
+          title: "Code sent",
+          description: "Please check your Telegram app for the verification code",
+        });
+      }
     } catch (error) {
       console.error("Connection error:", error);
       toast({
@@ -65,15 +76,16 @@ const TelegramConnect = () => {
     setIsConnecting(true);
     
     try {
-      // Again, simulating the verification step
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const result = await confirmTelegramCode(verificationCode);
       
-      toast({
-        title: "Connection successful",
-        description: "Your Telegram account has been connected successfully",
-      });
-      setAwaitingCode(false);
-      // Here you would typically store the session somewhere
+      if (result.success) {
+        setIsConnected(true);
+        setAwaitingCode(false);
+        toast({
+          title: "Connection successful",
+          description: "Your Telegram account has been connected successfully",
+        });
+      }
     } catch (error) {
       console.error("Verification error:", error);
       toast({
@@ -86,6 +98,19 @@ const TelegramConnect = () => {
     }
   };
 
+  const handleDisconnect = () => {
+    disconnectTelegram();
+    setIsConnected(false);
+    setApiId('');
+    setApiHash('');
+    setPhoneNumber('');
+    
+    toast({
+      title: "Disconnected",
+      description: "Your Telegram account has been disconnected",
+    });
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -96,7 +121,33 @@ const TelegramConnect = () => {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {!awaitingCode ? (
+          {isConnected ? (
+            <div className="space-y-4">
+              <div className="p-4 rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+                <div className="flex items-center">
+                  <Shield className="h-5 w-5 text-green-600 dark:text-green-400 mr-2" />
+                  <div>
+                    <p className="font-medium text-green-800 dark:text-green-400">
+                      Connected to Telegram
+                    </p>
+                    <p className="text-sm text-green-700 dark:text-green-500 mt-0.5">
+                      Using account: {phoneNumber}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="pt-4">
+                <Button 
+                  onClick={handleDisconnect} 
+                  variant="destructive"
+                  className="w-full"
+                >
+                  Disconnect from Telegram
+                </Button>
+              </div>
+            </div>
+          ) : !awaitingCode ? (
             <>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -144,6 +195,15 @@ const TelegramConnect = () => {
                   {isConnecting ? 'Connecting...' : 'Connect'}
                 </Button>
               </div>
+              
+              <div className="text-xs text-muted-foreground pt-2">
+                <p>
+                  You can get your API ID and API Hash by creating an application at{' '}
+                  <a href="https://my.telegram.org/apps" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
+                    https://my.telegram.org/apps
+                  </a>
+                </p>
+              </div>
             </>
           ) : (
             <>
@@ -173,15 +233,6 @@ const TelegramConnect = () => {
               </div>
             </>
           )}
-          
-          <div className="text-xs text-muted-foreground pt-2">
-            <p>
-              You can get your API ID and API Hash by creating an application at{' '}
-              <a href="https://my.telegram.org/apps" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
-                https://my.telegram.org/apps
-              </a>
-            </p>
-          </div>
         </div>
       </CardContent>
     </Card>

@@ -6,16 +6,7 @@ import { Button } from '@/components/ui/button';
 import { PlusCircle, Trash2, RefreshCw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import axios from 'axios';
-
-interface TelegramGroup {
-  id: string;
-  name: string;
-  active: boolean;
-  memberCount: number;
-  signalsCount: number;
-  lastSignal: string;
-}
+import { fetchGroups, updateGroupStatus, removeGroup, TelegramGroup } from '@/services/telegramService';
 
 interface TelegramGroupListProps {
   groups: TelegramGroup[];
@@ -24,15 +15,20 @@ interface TelegramGroupListProps {
   onRemoveGroup: (id: string) => void;
 }
 
-const TelegramGroupList = ({ groups, onAddGroup, onToggleGroup, onRemoveGroup }: TelegramGroupListProps) => {
+const TelegramGroupList = ({ groups = [], onAddGroup, onToggleGroup, onRemoveGroup }: TelegramGroupListProps) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [localGroups, setLocalGroups] = useState<TelegramGroup[]>(groups);
+
+  useEffect(() => {
+    setLocalGroups(groups);
+  }, [groups]);
 
   const handleRefresh = async () => {
     setLoading(true);
     try {
-      // In a real implementation, this would make an API call to refresh group data
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const refreshedGroups = await fetchGroups();
+      setLocalGroups(refreshedGroups);
       
       toast({
         title: "Groups refreshed",
@@ -47,6 +43,48 @@ const TelegramGroupList = ({ groups, onAddGroup, onToggleGroup, onRemoveGroup }:
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleGroup = async (id: string, active: boolean) => {
+    try {
+      await updateGroupStatus(id, active);
+      setLocalGroups(prevGroups => prevGroups.map(group => 
+        group.id === id ? { ...group, active } : group
+      ));
+      onToggleGroup(id, active);
+      
+      toast({
+        title: active ? "Group activated" : "Group deactivated",
+        description: `Group status has been updated`,
+      });
+    } catch (error) {
+      console.error("Error toggling group status:", error);
+      toast({
+        title: "Status update failed",
+        description: "Could not update group status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRemoveGroup = async (id: string) => {
+    try {
+      await removeGroup(id);
+      setLocalGroups(prevGroups => prevGroups.filter(group => group.id !== id));
+      onRemoveGroup(id);
+      
+      toast({
+        title: "Group removed",
+        description: "The group has been removed successfully",
+      });
+    } catch (error) {
+      console.error("Error removing group:", error);
+      toast({
+        title: "Removal failed",
+        description: "Could not remove the group",
+        variant: "destructive",
+      });
     }
   };
 
@@ -66,7 +104,7 @@ const TelegramGroupList = ({ groups, onAddGroup, onToggleGroup, onRemoveGroup }:
         </div>
       </CardHeader>
       <CardContent>
-        {groups.length === 0 ? (
+        {localGroups.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-muted-foreground mb-4">No groups added yet</p>
             <Button variant="outline" size="sm" onClick={onAddGroup}>
@@ -76,7 +114,7 @@ const TelegramGroupList = ({ groups, onAddGroup, onToggleGroup, onRemoveGroup }:
           </div>
         ) : (
           <div className="space-y-3">
-            {groups.map((group) => (
+            {localGroups.map((group) => (
               <div 
                 key={group.id}
                 className="p-4 border rounded-md flex items-center justify-between"
@@ -97,7 +135,7 @@ const TelegramGroupList = ({ groups, onAddGroup, onToggleGroup, onRemoveGroup }:
                   <div className="flex items-center gap-2">
                     <Switch 
                       checked={group.active} 
-                      onCheckedChange={(checked) => onToggleGroup(group.id, checked)}
+                      onCheckedChange={(checked) => handleToggleGroup(group.id, checked)}
                     />
                     <span className="text-sm">{group.active ? 'Active' : 'Inactive'}</span>
                   </div>
@@ -105,7 +143,7 @@ const TelegramGroupList = ({ groups, onAddGroup, onToggleGroup, onRemoveGroup }:
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => onRemoveGroup(group.id)}
+                    onClick={() => handleRemoveGroup(group.id)}
                     className="text-destructive hover:text-destructive hover:bg-destructive/10"
                   >
                     <Trash2 className="h-4 w-4" />
