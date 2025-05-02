@@ -20,7 +20,7 @@ export interface PerformanceChartProps {
   tooltipFormatter?: (value: number) => string;
 }
 
-const PerformanceChart = ({ title = "Performance", data, tooltipFormatter }: PerformanceChartProps) => {
+const PerformanceChart = ({ title = "Performance", data = { daily: [], weekly: [], monthly: [], yearly: [] }, tooltipFormatter }: PerformanceChartProps) => {
   const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('weekly');
   
   const getChartData = () => {
@@ -28,18 +28,38 @@ const PerformanceChart = ({ title = "Performance", data, tooltipFormatter }: Per
       return [];
     }
     
-    switch(timeframe) {
-      case 'daily':
-        return data.daily || [];
-      case 'weekly':
-        return data.weekly || [];
-      case 'monthly':
-        return data.monthly || [];
-      case 'yearly':
-        return data.yearly || [];
-      default:
-        return [];
+    // Garantir que o timeframe existe no objeto data
+    const timeframeData = data[timeframe] || [];
+    
+    // Se não houver dados, retornar um conjunto padrão 
+    if (timeframeData.length === 0) {
+      switch(timeframe) {
+        case 'daily':
+          return Array.from({ length: 24 }, (_, i) => ({
+            name: `${i}:00`,
+            value: 0
+          }));
+        case 'weekly':
+          return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => ({
+            name: day,
+            value: 0
+          }));
+        case 'monthly':
+          return Array.from({ length: 30 }, (_, i) => ({
+            name: `${i+1}`,
+            value: 0
+          }));
+        case 'yearly':
+          return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(month => ({
+            name: month,
+            value: 0
+          }));
+        default:
+          return [];
+      }
     }
+    
+    return timeframeData;
   };
 
   const formatTooltipValue = (value: number) => {
