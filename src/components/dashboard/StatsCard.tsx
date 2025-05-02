@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { TrendingDown, TrendingUp } from 'lucide-react';
 
-interface StatsCardProps {
+export interface StatsCardProps {
   title: string;
   value: string;
   change?: {
@@ -25,7 +25,7 @@ const StatsCard = ({ title, value, change, icon, className }: StatsCardProps) =>
             
             {change && (
               <div className={cn("flex items-center text-xs mt-2", 
-                change.positive ? "text-profit" : "text-loss")}>
+                change.positive ? "text-green-500" : "text-red-500")}>
                 {change.positive ? (
                   <TrendingUp className="h-3 w-3 mr-1" />
                 ) : (

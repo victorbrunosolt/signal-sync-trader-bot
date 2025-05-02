@@ -10,23 +10,6 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchAccountBalance, fetchActivePositions, fetchPerformanceData, fetchTradingStats } from '@/services/bybitService';
 import { useToast } from '@/hooks/use-toast';
 
-interface StatsCardProps {
-  title: string;
-  value: string;
-  description: string;
-}
-
-interface TradingStatsProps {
-  statisticsData: {
-    winRate: number;
-    profitFactor: number;
-    averageWin: number;
-    averageLoss: number;
-    tradesCount: number;
-  };
-  isLoading: boolean;
-}
-
 const Index = () => {
   const { toast } = useToast();
   const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
@@ -126,22 +109,22 @@ const Index = () => {
         <StatsCard
           title="Account Balance"
           value={isBalanceLoading ? "Loading..." : `$${balance?.toFixed(2) || '0.00'}`}
-          description="Total account equity"
+          className="bg-card"
         />
         <StatsCard
           title="Open Positions"
           value={isPositionsLoading ? "Loading..." : positions.length.toString()}
-          description="Currently active trades"
+          className="bg-card"
         />
         <StatsCard
           title="Win Rate"
           value={isStatsLoading ? "Loading..." : `${tradingStats?.winRate.toFixed(1) || '0.0'}%`}
-          description="Last 30 days"
+          className="bg-card"
         />
         <StatsCard
           title="Profit Factor"
           value={isStatsLoading ? "Loading..." : tradingStats?.profitFactor.toFixed(2) || '0.00'}
-          description="Total winners / total losers"
+          className="bg-card"
         />
       </div>
 
@@ -160,7 +143,7 @@ const Index = () => {
         </div>
         <div>
           <TradingStats
-            statisticsData={tradingStats || {
+            stats={tradingStats || {
               winRate: 0,
               profitFactor: 0,
               averageWin: 0,

@@ -66,6 +66,10 @@ export interface OrderRequest {
 }
 
 // API Endpoints
+// Backend API URL
+const BACKEND_API_URL = 'http://localhost:3000/api/bybit';
+
+// Direct API access
 const BASE_URL = 'https://api.bybit.com';
 const TESTNET_URL = 'https://api-testnet.bybit.com';
 
@@ -91,6 +95,17 @@ export const setCredentials = (apiKey: string, apiSecret: string, isTestnet: boo
   };
   
   localStorage.setItem('bybitApiSettings', JSON.stringify(settings));
+  
+  // Also send to backend if it's available
+  try {
+    axios.post(`${BACKEND_API_URL}/setCredentials`, {
+      apiKey,
+      apiSecret,
+      isTestnet
+    }).catch(err => console.error('Failed to set credentials on backend:', err));
+  } catch (error) {
+    console.error('Error setting credentials on backend:', error);
+  }
 };
 
 // Check if connected
@@ -155,34 +170,50 @@ const getHeaders = (data: any = {}) => {
   };
 };
 
-// API Methods
+// API Methods - Using backend when available, falling back to direct API access if needed
+
+// Attempt to use backend first, fallback to direct API
+const useBackendOrDirect = async (endpoint: string, directFn: () => Promise<any>) => {
+  try {
+    // Try backend first
+    const response = await axios.get(`${BACKEND_API_URL}${endpoint}`);
+    return response.data;
+  } catch (error) {
+    console.log('Backend API call failed, trying direct API:', error);
+    // Fall back to direct API
+    return directFn();
+  }
+};
+
 export const fetchAccountBalance = async (): Promise<number> => {
   if (!isConnectedToBybit()) {
     throw new Error('Not connected to Bybit');
   }
   
-  try {
-    const endpoint = '/v5/account/wallet-balance';
-    const params = { accountType: 'UNIFIED' };
-    
-    const response = await axios.get(
-      `${getApiUrl()}${endpoint}`,
-      { 
-        params,
-        headers: getHeaders(params)
+  return useBackendOrDirect('/balance', async () => {
+    try {
+      const endpoint = '/v5/account/wallet-balance';
+      const params = { accountType: 'UNIFIED' };
+      
+      const response = await axios.get(
+        `${getApiUrl()}${endpoint}`,
+        { 
+          params,
+          headers: getHeaders(params)
+        }
+      );
+      
+      if (response.data?.retCode === 0 && response.data?.result?.list?.length > 0) {
+        const balance = response.data.result.list[0].totalEquity;
+        return parseFloat(balance);
       }
-    );
-    
-    if (response.data?.retCode === 0 && response.data?.result?.list?.length > 0) {
-      const balance = response.data.result.list[0].totalEquity;
-      return parseFloat(balance);
+      
+      return 0;
+    } catch (error) {
+      console.error('Error fetching account balance:', error);
+      throw new Error('Failed to fetch account balance');
     }
-    
-    return 0;
-  } catch (error) {
-    console.error('Error fetching account balance:', error);
-    throw new Error('Failed to fetch account balance');
-  }
+  });
 };
 
 export const fetchActivePositions = async (): Promise<Position[]> => {
@@ -190,41 +221,43 @@ export const fetchActivePositions = async (): Promise<Position[]> => {
     throw new Error('Not connected to Bybit');
   }
   
-  try {
-    const endpoint = '/v5/position/list';
-    const params = { category: 'linear', settleCoin: 'USDT' };
-    
-    const response = await axios.get(
-      `${getApiUrl()}${endpoint}`,
-      { 
-        params,
-        headers: getHeaders(params)
+  return useBackendOrDirect('/positions', async () => {
+    try {
+      const endpoint = '/v5/position/list';
+      const params = { category: 'linear', settleCoin: 'USDT' };
+      
+      const response = await axios.get(
+        `${getApiUrl()}${endpoint}`,
+        { 
+          params,
+          headers: getHeaders(params)
+        }
+      );
+      
+      if (response.data?.retCode === 0) {
+        return response.data.result.list.map((pos: any) => ({
+          id: `${pos.symbol}-${pos.side}-${Date.now()}`,
+          symbol: pos.symbol,
+          side: pos.side,
+          size: parseFloat(pos.size),
+          entryPrice: parseFloat(pos.entryPrice),
+          markPrice: parseFloat(pos.markPrice),
+          currentPrice: parseFloat(pos.markPrice),
+          pnl: parseFloat(pos.unrealisedPnl),
+          pnlPercentage: parseFloat(pos.roe) * 100,
+          roe: parseFloat(pos.roe) * 100,
+          status: 'Active',
+          type: 'Isolated',
+          leverage: parseFloat(pos.leverage)
+        }));
       }
-    );
-    
-    if (response.data?.retCode === 0) {
-      return response.data.result.list.map((pos: any) => ({
-        id: `${pos.symbol}-${pos.side}-${Date.now()}`,
-        symbol: pos.symbol,
-        side: pos.side,
-        size: parseFloat(pos.size),
-        entryPrice: parseFloat(pos.entryPrice),
-        markPrice: parseFloat(pos.markPrice),
-        currentPrice: parseFloat(pos.markPrice),
-        pnl: parseFloat(pos.unrealisedPnl),
-        pnlPercentage: parseFloat(pos.roe) * 100,
-        roe: parseFloat(pos.roe) * 100,
-        status: 'Active',
-        type: 'Isolated',
-        leverage: parseFloat(pos.leverage)
-      }));
+      
+      return [];
+    } catch (error) {
+      console.error('Error fetching active positions:', error);
+      throw new Error('Failed to fetch active positions');
     }
-    
-    return [];
-  } catch (error) {
-    console.error('Error fetching active positions:', error);
-    throw new Error('Failed to fetch active positions');
-  }
+  });
 };
 
 export const fetchTradingStats = async (): Promise<TradingStats> => {
@@ -232,64 +265,66 @@ export const fetchTradingStats = async (): Promise<TradingStats> => {
     throw new Error('Not connected to Bybit');
   }
   
-  try {
-    const endpoint = '/v5/execution/list';
-    const params = { category: 'linear', limit: 100 };
-    
-    const response = await axios.get(
-      `${getApiUrl()}${endpoint}`,
-      { 
-        params,
-        headers: getHeaders(params)
-      }
-    );
-    
-    if (response.data?.retCode === 0) {
-      const trades = response.data.result.list || [];
+  return useBackendOrDirect('/stats', async () => {
+    try {
+      const endpoint = '/v5/execution/list';
+      const params = { category: 'linear', limit: 100 };
       
-      // Calculate trading statistics
-      let wins = 0;
-      let losses = 0;
-      let totalWinAmount = 0;
-      let totalLossAmount = 0;
-      
-      trades.forEach((trade: any) => {
-        const pnl = parseFloat(trade.closedPnl || '0');
-        if (pnl > 0) {
-          wins++;
-          totalWinAmount += pnl;
-        } else if (pnl < 0) {
-          losses++;
-          totalLossAmount += Math.abs(pnl);
+      const response = await axios.get(
+        `${getApiUrl()}${endpoint}`,
+        { 
+          params,
+          headers: getHeaders(params)
         }
-      });
+      );
       
-      const totalTrades = trades.length;
-      const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
-      const profitFactor = totalLossAmount > 0 ? totalWinAmount / totalLossAmount : wins > 0 ? 999 : 0;
-      const averageWin = wins > 0 ? totalWinAmount / wins : 0;
-      const averageLoss = losses > 0 ? totalLossAmount / losses : 0;
+      if (response.data?.retCode === 0) {
+        const trades = response.data.result.list || [];
+        
+        // Calculate trading statistics
+        let wins = 0;
+        let losses = 0;
+        let totalWinAmount = 0;
+        let totalLossAmount = 0;
+        
+        trades.forEach((trade: any) => {
+          const pnl = parseFloat(trade.closedPnl || '0');
+          if (pnl > 0) {
+            wins++;
+            totalWinAmount += pnl;
+          } else if (pnl < 0) {
+            losses++;
+            totalLossAmount += Math.abs(pnl);
+          }
+        });
+        
+        const totalTrades = trades.length;
+        const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
+        const profitFactor = totalLossAmount > 0 ? totalWinAmount / totalLossAmount : wins > 0 ? 999 : 0;
+        const averageWin = wins > 0 ? totalWinAmount / wins : 0;
+        const averageLoss = losses > 0 ? totalLossAmount / losses : 0;
+        
+        return {
+          winRate,
+          profitFactor,
+          averageWin,
+          averageLoss,
+          tradesCount: totalTrades
+        };
+      }
       
       return {
-        winRate,
-        profitFactor,
-        averageWin,
-        averageLoss,
-        tradesCount: totalTrades
+        winRate: 0,
+        profitFactor: 0,
+        averageWin: 0,
+        averageLoss: 0,
+        tradesCount: 0
       };
+    } catch (error) {
+      console.error('Error fetching trading stats:', error);
+      throw new Error('Failed to fetch trading stats');
     }
-    
-    return {
-      winRate: 0,
-      profitFactor: 0,
-      averageWin: 0,
-      averageLoss: 0,
-      tradesCount: 0
-    };
-  } catch (error) {
-    console.error('Error fetching trading stats:', error);
-    throw new Error('Failed to fetch trading stats');
-  }
+  });
 };
 
 export const fetchPerformanceData = async (timeframe: 'daily' | 'weekly' | 'monthly' | 'yearly'): Promise<PerformanceData> => {
@@ -297,66 +332,68 @@ export const fetchPerformanceData = async (timeframe: 'daily' | 'weekly' | 'mont
     throw new Error('Not connected to Bybit');
   }
   
-  try {
-    // In a production app, you'd likely have an endpoint to fetch historical balance data
-    // For now, we'll create synthetic data based on the current balance
-    
-    const currentBalance = await fetchAccountBalance();
-    let performanceData: PerformanceData = {
-      daily: [],
-      weekly: [],
-      monthly: [],
-      yearly: []
-    };
-    
-    // Get date values
-    const now = new Date();
-    const currentDay = now.getDate();
-    const currentMonth = now.getMonth();
-    
-    // Generate daily data (24 hours)
-    performanceData.daily = Array.from({ length: 24 }, (_, i) => {
-      const variance = (Math.random() * 0.05) * (Math.random() > 0.5 ? 1 : -1);
-      return {
-        name: `${i}:00`,
-        value: currentBalance * (1 + variance)
+  return useBackendOrDirect(`/performance?timeframe=${timeframe}`, async () => {
+    try {
+      // In a production app, you'd likely have an endpoint to fetch historical balance data
+      // For now, we'll create synthetic data based on the current balance
+      
+      const currentBalance = await fetchAccountBalance();
+      let performanceData: PerformanceData = {
+        daily: [],
+        weekly: [],
+        monthly: [],
+        yearly: []
       };
-    });
-    
-    // Generate weekly data (7 days)
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    performanceData.weekly = Array.from({ length: 7 }, (_, i) => {
-      const variance = (Math.random() * 0.1) * (Math.random() > 0.5 ? 1 : -1);
-      return {
-        name: days[i],
-        value: currentBalance * (1 + variance)
-      };
-    });
-    
-    // Generate monthly data (30 days)
-    performanceData.monthly = Array.from({ length: 30 }, (_, i) => {
-      const variance = (Math.random() * 0.2) * (Math.random() > 0.5 ? 1 : -1);
-      return {
-        name: `${i+1}`,
-        value: currentBalance * (1 + variance)
-      };
-    });
-    
-    // Generate yearly data (12 months)
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    performanceData.yearly = Array.from({ length: 12 }, (_, i) => {
-      const variance = (Math.random() * 0.5) * (Math.random() > 0.5 ? 1 : -1);
-      return {
-        name: months[i],
-        value: currentBalance * (1 + variance)
-      };
-    });
-    
-    return performanceData;
-  } catch (error) {
-    console.error('Error fetching performance data:', error);
-    throw new Error('Failed to fetch performance data');
-  }
+      
+      // Get date values
+      const now = new Date();
+      const currentDay = now.getDate();
+      const currentMonth = now.getMonth();
+      
+      // Generate daily data (24 hours)
+      performanceData.daily = Array.from({ length: 24 }, (_, i) => {
+        const variance = (Math.random() * 0.05) * (Math.random() > 0.5 ? 1 : -1);
+        return {
+          name: `${i}:00`,
+          value: currentBalance * (1 + variance)
+        };
+      });
+      
+      // Generate weekly data (7 days)
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      performanceData.weekly = Array.from({ length: 7 }, (_, i) => {
+        const variance = (Math.random() * 0.1) * (Math.random() > 0.5 ? 1 : -1);
+        return {
+          name: days[i],
+          value: currentBalance * (1 + variance)
+        };
+      });
+      
+      // Generate monthly data (30 days)
+      performanceData.monthly = Array.from({ length: 30 }, (_, i) => {
+        const variance = (Math.random() * 0.2) * (Math.random() > 0.5 ? 1 : -1);
+        return {
+          name: `${i+1}`,
+          value: currentBalance * (1 + variance)
+        };
+      });
+      
+      // Generate yearly data (12 months)
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      performanceData.yearly = Array.from({ length: 12 }, (_, i) => {
+        const variance = (Math.random() * 0.5) * (Math.random() > 0.5 ? 1 : -1);
+        return {
+          name: months[i],
+          value: currentBalance * (1 + variance)
+        };
+      });
+      
+      return performanceData;
+    } catch (error) {
+      console.error('Error fetching performance data:', error);
+      throw new Error('Failed to fetch performance data');
+    }
+  });
 };
 
 export const placeOrder = async (orderDetails: OrderRequest): Promise<any> => {
@@ -365,22 +402,30 @@ export const placeOrder = async (orderDetails: OrderRequest): Promise<any> => {
   }
   
   try {
-    const endpoint = '/v5/order/create';
+    // Try backend first
+    const response = await axios.post(`${BACKEND_API_URL}/orders`, orderDetails);
+    return response.data;
+  } catch (backendError) {
+    console.log('Backend API call failed, trying direct API:', backendError);
     
-    const response = await axios.post(
-      `${getApiUrl()}${endpoint}`,
-      orderDetails,
-      { headers: getHeaders(orderDetails) }
-    );
-    
-    if (response.data?.retCode === 0) {
-      return response.data.result;
-    } else {
-      throw new Error(response.data?.retMsg || 'Unknown error');
+    try {
+      const endpoint = '/v5/order/create';
+      
+      const response = await axios.post(
+        `${getApiUrl()}${endpoint}`,
+        orderDetails,
+        { headers: getHeaders(orderDetails) }
+      );
+      
+      if (response.data?.retCode === 0) {
+        return response.data.result;
+      } else {
+        throw new Error(response.data?.retMsg || 'Unknown error');
+      }
+    } catch (error) {
+      console.error('Error placing order:', error);
+      throw new Error('Failed to place order');
     }
-  } catch (error) {
-    console.error('Error placing order:', error);
-    throw new Error('Failed to place order');
   }
 };
 
@@ -390,27 +435,35 @@ export const cancelOrder = async (orderId: string, symbol: string): Promise<any>
   }
   
   try {
-    const endpoint = '/v5/order/cancel';
-    const data = {
-      category: 'linear',
-      symbol: symbol,
-      orderId: orderId
-    };
+    // Try backend first
+    const response = await axios.delete(`${BACKEND_API_URL}/orders/${orderId}?symbol=${symbol}`);
+    return response.data;
+  } catch (backendError) {
+    console.log('Backend API call failed, trying direct API:', backendError);
     
-    const response = await axios.post(
-      `${getApiUrl()}${endpoint}`,
-      data,
-      { headers: getHeaders(data) }
-    );
-    
-    if (response.data?.retCode === 0) {
-      return response.data.result;
-    } else {
-      throw new Error(response.data?.retMsg || 'Unknown error');
+    try {
+      const endpoint = '/v5/order/cancel';
+      const data = {
+        category: 'linear',
+        symbol: symbol,
+        orderId: orderId
+      };
+      
+      const response = await axios.post(
+        `${getApiUrl()}${endpoint}`,
+        data,
+        { headers: getHeaders(data) }
+      );
+      
+      if (response.data?.retCode === 0) {
+        return response.data.result;
+      } else {
+        throw new Error(response.data?.retMsg || 'Unknown error');
+      }
+    } catch (error) {
+      console.error('Error cancelling order:', error);
+      throw new Error('Failed to cancel order');
     }
-  } catch (error) {
-    console.error('Error cancelling order:', error);
-    throw new Error('Failed to cancel order');
   }
 };
 
@@ -419,30 +472,32 @@ export const fetchRecentOrders = async (limit = 10): Promise<any[]> => {
     throw new Error('Not connected to Bybit');
   }
   
-  try {
-    const endpoint = '/v5/order/history';
-    const params = {
-      category: 'linear',
-      limit: limit
-    };
-    
-    const response = await axios.get(
-      `${getApiUrl()}${endpoint}`,
-      { 
-        params,
-        headers: getHeaders(params)
+  return useBackendOrDirect(`/orders?limit=${limit}`, async () => {
+    try {
+      const endpoint = '/v5/order/history';
+      const params = {
+        category: 'linear',
+        limit: limit
+      };
+      
+      const response = await axios.get(
+        `${getApiUrl()}${endpoint}`,
+        { 
+          params,
+          headers: getHeaders(params)
+        }
+      );
+      
+      if (response.data?.retCode === 0) {
+        return response.data.result.list || [];
       }
-    );
-    
-    if (response.data?.retCode === 0) {
-      return response.data.result.list || [];
+      
+      return [];
+    } catch (error) {
+      console.error('Error fetching recent orders:', error);
+      throw new Error('Failed to fetch recent orders');
     }
-    
-    return [];
-  } catch (error) {
-    console.error('Error fetching recent orders:', error);
-    throw new Error('Failed to fetch recent orders');
-  }
+  });
 };
 
 export default {
