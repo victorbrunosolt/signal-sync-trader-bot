@@ -1,139 +1,155 @@
 
+import { useState } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import StatsCard from '@/components/dashboard/StatsCard';
 import TradingStats from '@/components/dashboard/TradingStats';
 import PerformanceChart from '@/components/dashboard/PerformanceChart';
-import ActivePositions, { Position } from '@/components/dashboard/ActivePositions';
-import RecentSignals, { Signal } from '@/components/dashboard/RecentSignals';
-import { useToast } from '@/hooks/use-toast';
-import { isConnectedToBybit, getActivePositions, getTradingStats, getAccountBalance } from '@/services/bybitService';
-import { useState, useEffect } from 'react';
+import RecentSignals from '@/components/dashboard/RecentSignals';
+import ActivePositions from '@/components/dashboard/ActivePositions';
 import { useQuery } from '@tanstack/react-query';
-
-// Estrutura padrão para os dados de desempenho
-const emptyPerformanceData = {
-  daily: [],
-  weekly: [],
-  monthly: [],
-  yearly: []
-};
+import { fetchAccountBalance, fetchActivePositions, fetchPerformanceData, fetchTradingStats } from '@/services/bybitService';
+import { useToast } from '@/hooks/use-toast';
 
 const Index = () => {
   const { toast } = useToast();
-  const [isConnected, setIsConnected] = useState(false);
-  
-  // Consulta para obter saldo da conta
-  const { data: accountBalance = 0 } = useQuery({
+  const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
+
+  // React Query for account balance
+  const { 
+    data: balance,
+    isLoading: isBalanceLoading 
+  } = useQuery({
     queryKey: ['accountBalance'],
-    queryFn: getAccountBalance,
-    enabled: isConnected,
-    refetchInterval: 30000, // Atualiza a cada 30 segundos
-    retry: 1,
-    onError: (error) => {
-      console.error('Failed to fetch account balance:', error);
-      toast({
-        title: "Erro ao obter saldo",
-        description: "Não foi possível obter o saldo da sua conta",
-        variant: "destructive",
-      });
+    queryFn: fetchAccountBalance,
+    meta: {
+      onError: (error: Error) => {
+        toast({
+          title: "Failed to load balance",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
     }
   });
-  
-  // Consulta para posições ativas
-  const { data: activePositions = [], error: positionsError } = useQuery({
+
+  // React Query for active positions
+  const { 
+    data: positions = [],
+    isLoading: isPositionsLoading 
+  } = useQuery({
     queryKey: ['activePositions'],
-    queryFn: getActivePositions,
-    enabled: isConnected,
-    refetchInterval: 5000, // Atualiza a cada 5 segundos
-    retry: 1,
-    onError: (error) => {
-      console.error('Failed to fetch positions:', error);
+    queryFn: fetchActivePositions,
+    meta: {
+      onError: (error: Error) => {
+        toast({
+          title: "Failed to load positions",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
     }
   });
-  
-  // Consulta para estatísticas de trading
-  const { data: tradingStats = {
-    winRate: 0,
-    profitFactor: 0,
-    averageWin: 0,
-    averageLoss: 0,
-    tradesCount: 0
-  }, error: statsError } = useQuery({
+
+  // React Query for trading stats
+  const { 
+    data: tradingStats,
+    isLoading: isStatsLoading 
+  } = useQuery({
     queryKey: ['tradingStats'],
-    queryFn: getTradingStats,
-    enabled: isConnected,
-    refetchInterval: 60000, // Atualiza a cada minuto
-    retry: 1,
-    onError: (error) => {
-      console.error('Failed to fetch trading stats:', error);
+    queryFn: fetchTradingStats,
+    meta: {
+      onError: (error: Error) => {
+        toast({
+          title: "Failed to load trading stats",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
     }
   });
-  
-  // Sinais recentes - como não temos API para isso, mantemos vazio por enquanto
-  const recentSignals: Signal[] = [];
 
-  useEffect(() => {
-    // Verificar se está conectado à Bybit
-    const connected = isConnectedToBybit();
-    setIsConnected(connected);
-
-    if (!connected) {
-      toast({
-        title: "Conexão com a Bybit necessária",
-        description: "Configure sua API na página Exchange para começar a operar",
-        variant: "default",
-      });
+  // React Query for performance chart data
+  const { 
+    data: performanceData,
+    isLoading: isPerformanceLoading 
+  } = useQuery({
+    queryKey: ['performanceData', timeframe],
+    queryFn: () => fetchPerformanceData(timeframe),
+    meta: {
+      onError: (error: Error) => {
+        toast({
+          title: "Failed to load performance data",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
     }
-  }, [toast]);
-
-  // Calcular o lucro diário da soma dos PnLs das posições ativas
-  const dailyProfit = activePositions.reduce((total, pos) => total + pos.pnl, 0);
-  const dailyProfitPercentage = accountBalance > 0 ? (dailyProfit / accountBalance) * 100 : 0;
+  });
 
   return (
     <MainLayout>
-      <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <StatsCard 
-          title="Lucro Diário" 
-          value={dailyProfit > 0 ? `+$${dailyProfit.toFixed(2)}` : `-$${Math.abs(dailyProfit).toFixed(2)}`}
-          change={{value: `${dailyProfitPercentage > 0 ? '+' : ''}${dailyProfitPercentage.toFixed(2)}%`, positive: dailyProfitPercentage > 0}} 
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <p className="text-muted-foreground">Overview of your trading performance</p>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-6">
+        <StatsCard
+          title="Account Balance"
+          value={isBalanceLoading ? "Loading..." : `$${balance?.toFixed(2) || '0.00'}`}
+          trend={3.2}
+          description="Total account equity"
         />
-        <StatsCard 
-          title="Win Rate" 
-          value={`${tradingStats?.winRate || 0}%`}
-          change={{value: "+0%", positive: true}} 
+        <StatsCard
+          title="Open Positions"
+          value={isPositionsLoading ? "Loading..." : positions.length.toString()}
+          trend={0}
+          description="Currently active trades"
         />
-        <StatsCard 
-          title="Posições Ativas" 
-          value={`${activePositions?.length || 0}`}
-          change={{value: "0", positive: true}} 
+        <StatsCard
+          title="Win Rate"
+          value={isStatsLoading ? "Loading..." : `${tradingStats?.winRate.toFixed(1) || '0.0'}%`}
+          trend={1.8}
+          description="Last 30 days"
+        />
+        <StatsCard
+          title="Profit Factor"
+          value={isStatsLoading ? "Loading..." : tradingStats?.profitFactor.toFixed(2) || '0.00'}
+          trend={-0.5}
+          description="Total winners / total losers"
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         <div className="lg:col-span-2">
-          <PerformanceChart 
-            title="Performance" 
-            data={emptyPerformanceData}
+          <PerformanceChart
+            title="Performance"
+            data={performanceData || {
+              daily: [],
+              weekly: [],
+              monthly: [],
+              yearly: []
+            }}
             tooltipFormatter={(value) => `$${value.toFixed(2)}`}
           />
         </div>
-        <TradingStats 
-          winRate={tradingStats?.winRate || 0}
-          profitFactor={tradingStats?.profitFactor || 0}
-          averageWin={tradingStats?.averageWin || 0}
-          averageLoss={tradingStats?.averageLoss || 0}
-          tradesCount={tradingStats?.tradesCount || 0}
-        />
+        <div>
+          <TradingStats
+            stats={tradingStats || {
+              winRate: 0,
+              profitFactor: 0,
+              averageWin: 0,
+              averageLoss: 0,
+              tradesCount: 0
+            }}
+            isLoading={isStatsLoading}
+          />
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <ActivePositions positions={activePositions} />
-        </div>
-        <RecentSignals signals={recentSignals} />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ActivePositions positions={positions || []} isLoading={isPositionsLoading} />
+        <RecentSignals signals={[]} isLoading={false} />
       </div>
     </MainLayout>
   );

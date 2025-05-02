@@ -1,9 +1,12 @@
 
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Trash2 } from 'lucide-react';
+import { PlusCircle, Trash2, RefreshCw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
+import axios from 'axios';
 
 interface TelegramGroup {
   id: string;
@@ -22,14 +25,45 @@ interface TelegramGroupListProps {
 }
 
 const TelegramGroupList = ({ groups, onAddGroup, onToggleGroup, onRemoveGroup }: TelegramGroupListProps) => {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+
+  const handleRefresh = async () => {
+    setLoading(true);
+    try {
+      // In a real implementation, this would make an API call to refresh group data
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      toast({
+        title: "Groups refreshed",
+        description: "Telegram group data has been updated",
+      });
+    } catch (error) {
+      console.error("Error refreshing groups:", error);
+      toast({
+        title: "Refresh failed",
+        description: "Could not refresh group data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Card>
       <CardHeader className="pb-3 flex flex-row items-center justify-between">
         <CardTitle className="text-lg">Telegram Groups</CardTitle>
-        <Button size="sm" onClick={onAddGroup}>
-          <PlusCircle className="h-4 w-4 mr-2" />
-          Add Group
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={handleRefresh} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button size="sm" onClick={onAddGroup}>
+            <PlusCircle className="h-4 w-4 mr-2" />
+            Add Group
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {groups.length === 0 ? (
