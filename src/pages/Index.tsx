@@ -10,7 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchAccountBalance, fetchActivePositions, fetchPerformanceData, fetchTradingStats, isConnectedToBybit } from '@/services/bybitService';
 import { useToast } from '@/hooks/use-toast';
 import { AlertTriangle } from 'lucide-react';
-import { Position } from '@/types/tradingTypes';
+import { Position } from '@/types/bybitTypes';
 
 const Index = () => {
   const { toast } = useToast();
@@ -207,7 +207,7 @@ const Index = () => {
           <PerformanceChart
             title="Performance"
             data={performanceData || emptyPerformanceData}
-            timeframe={timeframe}
+            selectedTimeframe={timeframe}
             onTimeframeChange={setTimeframe}
             isLoading={isPerformanceLoading}
             tooltipFormatter={(value) => `$${value.toFixed(2)}`}
@@ -223,7 +223,11 @@ const Index = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ActivePositions positions={positions} isLoading={isPositionsLoading} error={positionsError instanceof Error ? positionsError.message : null} />
+        <ActivePositions 
+          positions={positions}
+          loading={isPositionsLoading}
+          errorMessage={positionsError instanceof Error ? positionsError.message : null}
+        />
         <RecentSignals signals={[]} />
       </div>
     </MainLayout>
