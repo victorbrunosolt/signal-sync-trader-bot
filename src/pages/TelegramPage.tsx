@@ -6,6 +6,8 @@ import TelegramGroupList from '@/components/telegram/TelegramGroupList';
 import SignalParser from '@/components/telegram/SignalParser';
 import AddGroupDialog from '@/components/telegram/AddGroupDialog';
 import { useToast } from '@/hooks/use-toast';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle } from 'lucide-react';
 import { fetchGroups, addGroup, updateGroupStatus, removeGroup, TelegramGroup, isConnectedToTelegram } from '@/services/telegramService';
 import { useQuery } from '@tanstack/react-query';
 
@@ -13,6 +15,7 @@ const TelegramPage = () => {
   const { toast } = useToast();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [backendError, setBackendError] = useState<string | null>(null);
 
   useEffect(() => {
     setIsConnected(isConnectedToTelegram());
@@ -22,18 +25,32 @@ const TelegramPage = () => {
   const { 
     data: groups = [], 
     isLoading, 
+    error: groupsError,
     refetch: refetchGroups 
   } = useQuery({
     queryKey: ['telegramGroups'],
     queryFn: fetchGroups,
     enabled: isConnected,
+    retry: 1,
     meta: {
       onError: (error: Error) => {
+        console.error('Error fetching groups:', error);
+        
+        // Check if it's a network error (backend not available)
+        if (error.message.includes('Network error')) {
+          setBackendError('Cannot connect to backend server. Please ensure the server is running.');
+        }
+        
+        // Authentication errors
+        if (error.message.includes('Authentication error')) {
+          setIsConnected(false);
+        }
+        
         toast({
           title: "Failed to load groups",
           description: error.message,
           variant: "destructive",
-        })
+        });
       }
     }
   });
@@ -49,10 +66,11 @@ const TelegramPage = () => {
       });
       setIsAddDialogOpen(false);
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Error adding group:', error);
       toast({
         title: "Failed to add group",
-        description: "Could not add the group to Telegram",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -68,10 +86,11 @@ const TelegramPage = () => {
         description: `Group status has been updated`,
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Error toggling group status:', error);
       toast({
         title: "Status update failed",
-        description: "Could not update group status",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -87,10 +106,11 @@ const TelegramPage = () => {
         description: "The group has been removed successfully",
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Error removing group:', error);
       toast({
         title: "Removal failed",
-        description: "Could not remove the group",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -103,10 +123,20 @@ const TelegramPage = () => {
         <p className="text-muted-foreground">Connect and configure your Telegram signal sources</p>
       </div>
 
+      {backendError && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Backend Connection Error</AlertTitle>
+          <AlertDescription>{backendError}</AlertDescription>
+        </Alert>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <TelegramConnect />
+        <TelegramConnect onConnectionStateChange={(state) => setIsConnected(state)} />
         <TelegramGroupList 
           groups={groups}
+          isLoading={isLoading}
+          error={groupsError instanceof Error ? groupsError.message : null}
           onAddGroup={() => setIsAddDialogOpen(true)}
           onToggleGroup={handleToggleGroup}
           onRemoveGroup={handleRemoveGroup}

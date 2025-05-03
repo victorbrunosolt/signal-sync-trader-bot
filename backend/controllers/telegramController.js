@@ -1,4 +1,3 @@
-
 const { Api } = require('telegram');
 const { StringSession } = require('telegram/sessions');
 const { TelegramClient } = require('telegram');
@@ -21,6 +20,9 @@ if (!fs.existsSync(CONFIG_DIR)) {
 
 // Telegram client instances
 const clients = {};
+
+// Pending auth sessions - store phone code hash for 2FA
+const pendingAuth = {};
 
 // Helper to save parser config
 const saveParserConfigToFile = (config) => {
@@ -75,6 +77,11 @@ exports.initAuth = async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    // Validate phone number format
+    if (!phoneNumber.startsWith('+')) {
+      return res.status(400).json({ error: 'Phone number must start with country code (e.g., +1234567890)' });
+    }
+
     // Create a new StringSession
     const stringSession = new StringSession('');
     
@@ -89,12 +96,14 @@ exports.initAuth = async (req, res) => {
     // Store client in memory
     clients[phoneNumber] = client;
 
-    // Connect and send code
+    // Connect
+    console.log(`Attempting to connect with phone ${phoneNumber}`);
     await client.connect();
     
     // Check if already has a valid session
     const sessionFile = path.join(SESSIONS_DIR, `${phoneNumber}.session`);
     if (fs.existsSync(sessionFile)) {
+      console.log(`Found existing session for ${phoneNumber}, trying to use it`);
       const sessionString = fs.readFileSync(sessionFile, 'utf8');
       const loadedSession = new StringSession(sessionString);
       
@@ -111,24 +120,58 @@ exports.initAuth = async (req, res) => {
         if (await loadedClient.checkAuthorization()) {
           // Session is valid
           clients[phoneNumber] = loadedClient;
+          console.log(`Successfully authenticated using saved session for ${phoneNumber}`);
           return res.status(200).json({ success: true, alreadyAuthorized: true });
         }
       } catch (error) {
         // Session is invalid, proceed with new login
-        console.log('Saved session is invalid, proceeding with new login');
+        console.log('Saved session is invalid, proceeding with new login:', error.message);
       }
     }
 
     // Request code
-    await client.sendCode(
-      {
-        apiId: parseInt(apiId),
-        apiHash: apiHash,
-      },
-      phoneNumber
-    );
+    console.log(`Requesting auth code for ${phoneNumber}`);
+    try {
+      const result = await client.sendCode(
+        {
+          apiId: parseInt(apiId),
+          apiHash: apiHash,
+        },
+        phoneNumber
+      );
 
-    res.status(200).json({ success: true, awaitingCode: true });
+      // Store the phone code hash for later
+      pendingAuth[phoneNumber] = {
+        phoneCodeHash: result.phoneCodeHash,
+        apiId,
+        apiHash
+      };
+
+      console.log(`Auth code requested for ${phoneNumber}, awaiting verification`);
+      res.status(200).json({ success: true, awaitingCode: true });
+    } catch (error) {
+      console.error('Error sending code:', error);
+      
+      // Check for specific Telegram errors
+      const errorMessage = error.message || '';
+      
+      if (errorMessage.includes('FLOOD_WAIT')) {
+        const waitTime = errorMessage.match(/\d+/); // Extract wait time if available
+        const waitMsg = waitTime ? `Please try again after ${waitTime[0]} seconds.` : 'Please try again later.';
+        return res.status(429).json({ error: `Too many requests: ${waitMsg}` });
+      }
+      
+      if (errorMessage.includes('PHONE_NUMBER_INVALID')) {
+        return res.status(400).json({ error: 'The phone number is invalid. Please check the format and try again.' });
+      }
+      
+      if (errorMessage.includes('API_ID_INVALID')) {
+        return res.status(400).json({ error: 'The API ID is invalid. Please check your credentials.' });
+      }
+      
+      // Generic error
+      res.status(500).json({ error: `Failed to send verification code: ${error.message}` });
+    }
   } catch (error) {
     console.error('Error initializing auth:', error);
     res.status(500).json({ error: error.message });
@@ -148,28 +191,128 @@ exports.confirmAuth = async (req, res) => {
       return res.status(400).json({ error: 'No pending authentication for this phone number' });
     }
 
+    if (!pendingAuth[phoneNumber]) {
+      return res.status(400).json({ error: 'Authentication session expired. Please start again.' });
+    }
+
     const client = clients[phoneNumber];
+    const { phoneCodeHash } = pendingAuth[phoneNumber];
 
-    // Sign in with the code
-    await client.signIn({ 
-      phoneNumber, 
-      phoneCode: code,
-      onError: (err) => {
-        console.error('Error during sign in:', err);
-        throw err;
+    console.log(`Attempting to sign in with code for ${phoneNumber}`);
+    
+    try {
+      // Sign in with the code
+      await client.signIn({
+        phoneNumber,
+        phoneCode: code, 
+        phoneCodeHash
+      });
+      
+      // Check if 2FA is needed (password)
+      const isPasswordNeeded = await client.isUserAuthorized();
+      
+      if (!isPasswordNeeded) {
+        // Handle 2FA if needed
+        console.log(`2FA needed for ${phoneNumber}, asking for password`);
+        return res.status(200).json({ 
+          success: false, 
+          needs2FA: true,
+          message: "Two-factor authentication is required. Please provide your password."
+        });
       }
-    });
 
-    // Save the session string to a file
-    const sessionString = client.session.save();
-    fs.writeFileSync(
-      path.join(SESSIONS_DIR, `${phoneNumber}.session`),
-      sessionString
-    );
+      // Save the session string to a file
+      const sessionString = client.session.save();
+      fs.writeFileSync(
+        path.join(SESSIONS_DIR, `${phoneNumber}.session`),
+        sessionString
+      );
 
-    res.status(200).json({ success: true });
+      // Clean up the pending auth
+      delete pendingAuth[phoneNumber];
+
+      console.log(`Successfully authenticated for ${phoneNumber}`);
+      res.status(200).json({ success: true });
+    } catch (error) {
+      console.error('Error during sign in:', error);
+      
+      // Check for specific Telegram errors
+      const errorMessage = error.message || '';
+      
+      if (errorMessage.includes('PHONE_CODE_INVALID')) {
+        return res.status(400).json({ error: 'PHONE_CODE_INVALID: The verification code is incorrect.' });
+      }
+      
+      if (errorMessage.includes('PHONE_CODE_EXPIRED')) {
+        delete pendingAuth[phoneNumber];
+        return res.status(400).json({ error: 'PHONE_CODE_EXPIRED: The verification code has expired. Please restart authentication.' });
+      }
+      
+      if (errorMessage.includes('SESSION_PASSWORD_NEEDED')) {
+        return res.status(200).json({ 
+          success: false, 
+          needs2FA: true,
+          message: "Two-factor authentication is required. Please provide your password."
+        });
+      }
+      
+      // Generic error
+      res.status(500).json({ error: `Error during sign in: ${error.message}` });
+    }
   } catch (error) {
     console.error('Error confirming auth:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Handle 2FA password verification
+exports.confirm2FA = async (req, res) => {
+  try {
+    const { phoneNumber, password } = req.body;
+
+    if (!phoneNumber || !password) {
+      return res.status(400).json({ error: 'Missing phone number or password' });
+    }
+
+    if (!clients[phoneNumber]) {
+      return res.status(400).json({ error: 'No pending authentication for this phone number' });
+    }
+
+    const client = clients[phoneNumber];
+
+    console.log(`Attempting 2FA login for ${phoneNumber}`);
+    
+    try {
+      // Submit 2FA password
+      await client.checkPassword(password);
+      
+      // Save the session string to a file
+      const sessionString = client.session.save();
+      fs.writeFileSync(
+        path.join(SESSIONS_DIR, `${phoneNumber}.session`),
+        sessionString
+      );
+
+      // Clean up the pending auth
+      delete pendingAuth[phoneNumber];
+
+      console.log(`Successfully authenticated with 2FA for ${phoneNumber}`);
+      res.status(200).json({ success: true });
+    } catch (error) {
+      console.error('Error during 2FA login:', error);
+      
+      // Check for specific Telegram errors
+      const errorMessage = error.message || '';
+      
+      if (errorMessage.includes('PASSWORD_HASH_INVALID')) {
+        return res.status(400).json({ error: 'The password is incorrect.' });
+      }
+      
+      // Generic error
+      res.status(500).json({ error: `Error during 2FA login: ${error.message}` });
+    }
+  } catch (error) {
+    console.error('Error confirming 2FA:', error);
     res.status(500).json({ error: error.message });
   }
 };

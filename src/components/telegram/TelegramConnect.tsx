@@ -4,7 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Shield } from 'lucide-react';
+import { Shield, AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { initTelegramAuth, confirmTelegramCode, isConnectedToTelegram, getTelegramConfig, disconnectTelegram } from '@/services/telegramService';
 
 const TelegramConnect = () => {
@@ -16,6 +17,7 @@ const TelegramConnect = () => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [awaitingCode, setAwaitingCode] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     // Check if already connected
@@ -30,10 +32,24 @@ const TelegramConnect = () => {
   }, []);
 
   const handleConnect = async () => {
+    // Reset error state
+    setError(null);
+
     if (!apiId || !apiHash || !phoneNumber) {
+      setError("Please fill in all required fields");
       toast({
         title: "Missing fields",
         description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!phoneNumber.startsWith('+')) {
+      setError("Phone number must start with country code (e.g., +1234567890)");
+      toast({
+        title: "Invalid phone number",
+        description: "Phone number must include the country code (e.g., +1234567890)",
         variant: "destructive",
       });
       return;
@@ -50,12 +66,20 @@ const TelegramConnect = () => {
           title: "Code sent",
           description: "Please check your Telegram app for the verification code",
         });
+      } else if (result.alreadyAuthorized) {
+        setIsConnected(true);
+        toast({
+          title: "Already connected",
+          description: "Your Telegram account is already connected",
+        });
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error("Connection error:", error);
+      setError(`Connection failed: ${errorMessage}`);
       toast({
         title: "Connection failed",
-        description: "Could not connect to Telegram. Please check your credentials.",
+        description: `Could not connect to Telegram: ${errorMessage}`,
         variant: "destructive",
       });
     } finally {
@@ -64,7 +88,11 @@ const TelegramConnect = () => {
   };
 
   const handleVerify = async () => {
+    // Reset error state
+    setError(null);
+
     if (!verificationCode) {
+      setError("Please enter the verification code from Telegram");
       toast({
         title: "Verification code required",
         description: "Please enter the verification code from Telegram",
@@ -87,10 +115,20 @@ const TelegramConnect = () => {
         });
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error("Verification error:", error);
+      
+      // More specific error message for code verification issues
+      const userError = errorMessage.includes('PHONE_CODE_INVALID') 
+        ? 'The verification code is incorrect. Please try again.'
+        : (errorMessage.includes('PHONE_CODE_EXPIRED') 
+            ? 'The verification code has expired. Please restart authentication.'
+            : `Verification failed: ${errorMessage}`);
+      
+      setError(userError);
       toast({
         title: "Verification failed",
-        description: "The verification code is incorrect or expired",
+        description: userError,
         variant: "destructive",
       });
     } finally {
@@ -104,6 +142,7 @@ const TelegramConnect = () => {
     setApiId('');
     setApiHash('');
     setPhoneNumber('');
+    setError(null);
     
     toast({
       title: "Disconnected",
@@ -121,6 +160,13 @@ const TelegramConnect = () => {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          
           {isConnected ? (
             <div className="space-y-4">
               <div className="p-4 rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">

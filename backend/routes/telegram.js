@@ -6,6 +6,7 @@ const router = express.Router();
 // Authentication
 router.post('/auth/init', telegramController.initAuth);
 router.post('/auth/confirm', telegramController.confirmAuth);
+router.post('/auth/2fa', telegramController.confirm2FA);
 
 // Groups
 router.get('/groups', telegramController.getGroups);

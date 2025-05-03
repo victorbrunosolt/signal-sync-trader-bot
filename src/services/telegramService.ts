@@ -77,7 +77,7 @@ export const getTelegramConfig = (): TelegramConfig => {
 };
 
 // Authentication
-export const initTelegramAuth = async (apiId: string, apiHash: string, phoneNumber: string): Promise<{ awaitingCode: boolean }> => {
+export const initTelegramAuth = async (apiId: string, apiHash: string, phoneNumber: string): Promise<{ awaitingCode: boolean; alreadyAuthorized?: boolean }> => {
   try {
     // Call backend API
     const response = await axios.post(`${BACKEND_API_URL}/auth/init`, {
@@ -97,10 +97,28 @@ export const initTelegramAuth = async (apiId: string, apiHash: string, phoneNumb
     localStorage.setItem(TELEGRAM_CONFIG_KEY, JSON.stringify(telegramConfig));
     
     return { 
-      awaitingCode: response.data.awaitingCode || false
+      awaitingCode: response.data.awaitingCode || false,
+      alreadyAuthorized: response.data.alreadyAuthorized || false
     };
   } catch (error) {
     console.error('Error initializing Telegram auth:', error);
+    
+    if (axios.isAxiosError(error)) {
+      // Handle network or server errors
+      if (!error.response) {
+        throw new Error('Network error: Cannot reach the backend server. Please ensure the server is running.');
+      }
+      
+      // Handle specific API errors
+      if (error.response.data && error.response.data.error) {
+        throw new Error(`Telegram API error: ${error.response.data.error}`);
+      }
+      
+      // Generic error based on status
+      throw new Error(`Server error (${error.response.status}): ${error.response.statusText}`);
+    }
+    
+    // Default error
     throw new Error('Failed to initialize Telegram authentication');
   }
 };
@@ -120,6 +138,34 @@ export const confirmTelegramCode = async (code: string): Promise<{ success: bool
     return { success: true };
   } catch (error) {
     console.error('Error confirming Telegram code:', error);
+    
+    if (axios.isAxiosError(error)) {
+      // Handle network or server errors
+      if (!error.response) {
+        throw new Error('Network error: Cannot reach the backend server. Please ensure the server is running.');
+      }
+      
+      // Handle specific API errors
+      if (error.response.data && error.response.data.error) {
+        const errorMsg = error.response.data.error;
+        
+        // Map common Telegram error codes to user-friendly messages
+        if (errorMsg.includes('PHONE_CODE_INVALID')) {
+          throw new Error('PHONE_CODE_INVALID: The verification code is incorrect.');
+        } else if (errorMsg.includes('PHONE_CODE_EXPIRED')) {
+          throw new Error('PHONE_CODE_EXPIRED: The verification code has expired. Please restart the authentication process.');
+        } else if (errorMsg.includes('FLOOD_WAIT')) {
+          throw new Error('FLOOD_WAIT: Too many attempts. Please wait before trying again.');
+        }
+        
+        throw new Error(`Telegram API error: ${errorMsg}`);
+      }
+      
+      // Generic error based on status
+      throw new Error(`Server error (${error.response.status}): ${error.response.statusText}`);
+    }
+    
+    // Default error
     throw new Error('Failed to confirm Telegram authentication code');
   }
 };
@@ -143,6 +189,25 @@ export const fetchGroups = async (): Promise<TelegramGroup[]> => {
     return response.data;
   } catch (error) {
     console.error('Error fetching groups:', error);
+    
+    if (axios.isAxiosError(error)) {
+      // Handle specific error cases
+      if (!error.response) {
+        throw new Error('Network error: Cannot reach the backend server. Please ensure the server is running.');
+      }
+      
+      if (error.response.status === 401) {
+        // Session expired or auth issues
+        telegramConfig.isConnected = false;
+        localStorage.setItem(TELEGRAM_CONFIG_KEY, JSON.stringify(telegramConfig));
+        throw new Error('Authentication error: Your Telegram session has expired. Please reconnect.');
+      }
+      
+      if (error.response.data && error.response.data.error) {
+        throw new Error(`Telegram API error: ${error.response.data.error}`);
+      }
+    }
+    
     throw new Error('Failed to fetch Telegram groups');
   }
 };
@@ -286,6 +351,25 @@ export const fetchRecentSignals = async (groupId?: string, limit = 10): Promise<
     return response.data;
   } catch (error) {
     console.error('Error fetching recent signals:', error);
+    
+    if (axios.isAxiosError(error)) {
+      // Handle specific error cases
+      if (!error.response) {
+        throw new Error('Network error: Cannot reach the backend server. Please ensure the server is running.');
+      }
+      
+      if (error.response.status === 401) {
+        // Session expired or auth issues
+        telegramConfig.isConnected = false;
+        localStorage.setItem(TELEGRAM_CONFIG_KEY, JSON.stringify(telegramConfig));
+        throw new Error('Authentication error: Your Telegram session has expired. Please reconnect.');
+      }
+      
+      if (error.response.data && error.response.data.error) {
+        throw new Error(`API error: ${error.response.data.error}`);
+      }
+    }
+    
     throw new Error('Failed to fetch recent signals');
   }
 };
