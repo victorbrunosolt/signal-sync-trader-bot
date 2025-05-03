@@ -8,7 +8,7 @@ import AddGroupDialog from '@/components/telegram/AddGroupDialog';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
-import { fetchGroups, addGroup, updateGroupStatus, removeGroup, TelegramGroup, isConnectedToTelegram } from '@/services/telegramService';
+import { fetchGroups, addGroup, updateGroupStatus, removeGroup, isConnectedToTelegram } from '@/services/telegramService';
 import { useQuery } from '@tanstack/react-query';
 
 const TelegramPage = () => {
@@ -18,6 +18,7 @@ const TelegramPage = () => {
   const [backendError, setBackendError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Initialize connection state from saved settings
     setIsConnected(isConnectedToTelegram());
   }, []);
 

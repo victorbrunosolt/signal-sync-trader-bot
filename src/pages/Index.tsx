@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import StatsCard from '@/components/dashboard/StatsCard';
 import TradingStats from '@/components/dashboard/TradingStats';
@@ -7,7 +7,7 @@ import PerformanceChart from '@/components/dashboard/PerformanceChart';
 import RecentSignals from '@/components/dashboard/RecentSignals';
 import ActivePositions from '@/components/dashboard/ActivePositions';
 import { useQuery } from '@tanstack/react-query';
-import { fetchAccountBalance, fetchActivePositions, fetchPerformanceData, fetchTradingStats } from '@/services/bybitService';
+import { fetchAccountBalance, fetchActivePositions, fetchPerformanceData, fetchTradingStats, isConnectedToBybit } from '@/services/bybitService';
 import { useToast } from '@/hooks/use-toast';
 import { AlertTriangle } from 'lucide-react';
 import { Position } from '@/types/tradingTypes';
@@ -16,6 +16,12 @@ const Index = () => {
   const { toast } = useToast();
   const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
   const [backendConnected, setBackendConnected] = useState<boolean>(true);
+  const [isExchangeConnected, setIsExchangeConnected] = useState<boolean>(false);
+  
+  // Check if already connected to exchange
+  useEffect(() => {
+    setIsExchangeConnected(isConnectedToBybit());
+  }, []);
 
   // React Query for account balance
   const { 
@@ -25,10 +31,13 @@ const Index = () => {
   } = useQuery({
     queryKey: ['accountBalance'],
     queryFn: fetchAccountBalance,
+    enabled: isExchangeConnected,
+    retry: 1,
     meta: {
       onError: (error: Error) => {
         if (error.message.includes("Failed to fetch") || error.message.includes("Network Error")) {
           setBackendConnected(false);
+          console.error("Backend connection error:", error);
         }
         toast({
           title: "Failed to load balance",
@@ -47,10 +56,13 @@ const Index = () => {
   } = useQuery({
     queryKey: ['activePositions'],
     queryFn: fetchActivePositions,
+    enabled: isExchangeConnected,
+    retry: 1,
     meta: {
       onError: (error: Error) => {
         if (error.message.includes("Failed to fetch") || error.message.includes("Network Error")) {
           setBackendConnected(false);
+          console.error("Backend connection error:", error);
         }
         toast({
           title: "Failed to load positions",
@@ -69,10 +81,13 @@ const Index = () => {
   } = useQuery({
     queryKey: ['tradingStats'],
     queryFn: fetchTradingStats,
+    enabled: isExchangeConnected,
+    retry: 1,
     meta: {
       onError: (error: Error) => {
         if (error.message.includes("Failed to fetch") || error.message.includes("Network Error")) {
           setBackendConnected(false);
+          console.error("Backend connection error:", error);
         }
         toast({
           title: "Failed to load trading stats",
@@ -91,10 +106,13 @@ const Index = () => {
   } = useQuery({
     queryKey: ['performanceData', timeframe],
     queryFn: () => fetchPerformanceData(timeframe),
+    enabled: isExchangeConnected,
+    retry: 1,
     meta: {
       onError: (error: Error) => {
         if (error.message.includes("Failed to fetch") || error.message.includes("Network Error")) {
           setBackendConnected(false);
+          console.error("Backend connection error:", error);
         }
         toast({
           title: "Failed to load performance data",
@@ -139,6 +157,17 @@ const Index = () => {
         <p className="text-muted-foreground">Overview of your trading performance</p>
       </div>
 
+      {!isExchangeConnected && (
+        <div className="mb-6 p-4 border border-blue-300 bg-blue-50 dark:bg-blue-950 dark:border-blue-800 rounded-md">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="text-blue-500" size={18} />
+            <p className="text-sm font-medium text-blue-700 dark:text-blue-400">
+              Not connected to Bybit. Please connect your API keys in the Exchange page to see live trading data.
+            </p>
+          </div>
+        </div>
+      )}
+
       {!backendConnected && (
         <div className="mb-6 p-4 border border-yellow-300 bg-yellow-50 dark:bg-yellow-950 dark:border-yellow-800 rounded-md">
           <div className="flex items-center gap-2">
@@ -178,6 +207,9 @@ const Index = () => {
           <PerformanceChart
             title="Performance"
             data={performanceData || emptyPerformanceData}
+            timeframe={timeframe}
+            onTimeframeChange={setTimeframe}
+            isLoading={isPerformanceLoading}
             tooltipFormatter={(value) => `$${value.toFixed(2)}`}
           />
         </div>
@@ -185,12 +217,13 @@ const Index = () => {
           <TradingStats
             stats={tradingStats || emptyStats}
             isLoading={isStatsLoading}
+            error={statsError instanceof Error ? statsError.message : null}
           />
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ActivePositions positions={positions} />
+        <ActivePositions positions={positions} isLoading={isPositionsLoading} error={positionsError instanceof Error ? positionsError.message : null} />
         <RecentSignals signals={[]} />
       </div>
     </MainLayout>

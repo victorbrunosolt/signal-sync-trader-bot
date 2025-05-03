@@ -23,7 +23,7 @@ const TradingStats = ({ stats, isLoading, error }: TradingStatsProps) => {
       </CardHeader>
       <CardContent>
         {error && (
-          <Alert variant={isBackendError ? "warning" : "destructive"} className="mb-4">
+          <Alert variant={isBackendError ? "default" : "destructive"} className="mb-4">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>{isBackendError ? "Backend Connection Error" : "Error"}</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
