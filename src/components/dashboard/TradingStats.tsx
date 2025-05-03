@@ -13,6 +13,9 @@ export interface TradingStatsProps {
 }
 
 const TradingStats = ({ stats, isLoading, error }: TradingStatsProps) => {
+  // Check for backend connection errors
+  const isBackendError = error && error.includes('Network error');
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -20,9 +23,9 @@ const TradingStats = ({ stats, isLoading, error }: TradingStatsProps) => {
       </CardHeader>
       <CardContent>
         {error && (
-          <Alert variant="destructive" className="mb-4">
+          <Alert variant={isBackendError ? "warning" : "destructive"} className="mb-4">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Error</AlertTitle>
+            <AlertTitle>{isBackendError ? "Backend Connection Error" : "Error"}</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}

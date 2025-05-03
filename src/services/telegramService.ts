@@ -42,6 +42,14 @@ const TELEGRAM_PARSER_CONFIG_KEY = 'telegramParserConfig';
 // Backend API URL - this would point to your Node.js backend server
 const BACKEND_API_URL = 'http://localhost:3000/api/telegram';
 
+// Fallback configuration for when backend is unavailable
+const FALLBACK_CONFIG: TelegramConfig = {
+  apiId: '',
+  apiHash: '',
+  phoneNumber: '',
+  isConnected: false
+};
+
 // Initialize from localStorage
 export const initFromLocalStorage = (): TelegramConfig => {
   if (typeof window !== 'undefined') {
@@ -123,7 +131,7 @@ export const initTelegramAuth = async (apiId: string, apiHash: string, phoneNumb
   }
 };
 
-export const confirmTelegramCode = async (code: string): Promise<{ success: boolean }> => {
+export const confirmTelegramCode = async (code: string): Promise<{ success: boolean; needs2FA?: boolean; message?: string }> => {
   try {
     // Call backend API
     const response = await axios.post(`${BACKEND_API_URL}/auth/confirm`, {
@@ -131,11 +139,25 @@ export const confirmTelegramCode = async (code: string): Promise<{ success: bool
       phoneNumber: telegramConfig.phoneNumber
     });
     
-    // Update stored config
-    telegramConfig.isConnected = true;
-    localStorage.setItem(TELEGRAM_CONFIG_KEY, JSON.stringify(telegramConfig));
+    // Handle 2FA requirement
+    if (response.data.needs2FA) {
+      return { 
+        success: false,
+        needs2FA: true,
+        message: response.data.message || 'Two-factor authentication required'
+      };
+    }
     
-    return { success: true };
+    // Update stored config - only if fully authenticated
+    if (response.data.success) {
+      telegramConfig.isConnected = true;
+      localStorage.setItem(TELEGRAM_CONFIG_KEY, JSON.stringify(telegramConfig));
+    }
+    
+    return { 
+      success: response.data.success,
+      message: response.data.message
+    };
   } catch (error) {
     console.error('Error confirming Telegram code:', error);
     
@@ -156,6 +178,12 @@ export const confirmTelegramCode = async (code: string): Promise<{ success: bool
           throw new Error('PHONE_CODE_EXPIRED: The verification code has expired. Please restart the authentication process.');
         } else if (errorMsg.includes('FLOOD_WAIT')) {
           throw new Error('FLOOD_WAIT: Too many attempts. Please wait before trying again.');
+        } else if (errorMsg.includes('SESSION_PASSWORD_NEEDED')) {
+          return { 
+            success: false,
+            needs2FA: true,
+            message: 'Two-factor authentication is required'
+          };
         }
         
         throw new Error(`Telegram API error: ${errorMsg}`);
@@ -167,6 +195,55 @@ export const confirmTelegramCode = async (code: string): Promise<{ success: bool
     
     // Default error
     throw new Error('Failed to confirm Telegram authentication code');
+  }
+};
+
+// New function to handle 2FA password verification
+export const confirm2FAPassword = async (password: string): Promise<{ success: boolean; message?: string }> => {
+  try {
+    // Call backend API
+    const response = await axios.post(`${BACKEND_API_URL}/auth/2fa`, {
+      password,
+      phoneNumber: telegramConfig.phoneNumber
+    });
+    
+    // Update stored config
+    if (response.data.success) {
+      telegramConfig.isConnected = true;
+      localStorage.setItem(TELEGRAM_CONFIG_KEY, JSON.stringify(telegramConfig));
+    }
+    
+    return { 
+      success: response.data.success,
+      message: response.data.message || response.data.details
+    };
+  } catch (error) {
+    console.error('Error confirming 2FA password:', error);
+    
+    if (axios.isAxiosError(error)) {
+      // Handle network or server errors
+      if (!error.response) {
+        throw new Error('Network error: Cannot reach the backend server. Please ensure the server is running.');
+      }
+      
+      // Handle specific API errors
+      if (error.response.data && error.response.data.error) {
+        const errorMsg = error.response.data.error;
+        
+        // Map common Telegram error codes to user-friendly messages
+        if (errorMsg.includes('PASSWORD_HASH_INVALID')) {
+          throw new Error('PASSWORD_HASH_INVALID: The password is incorrect.');
+        }
+        
+        throw new Error(`Telegram API error: ${errorMsg}`);
+      }
+      
+      // Generic error based on status
+      throw new Error(`Server error (${error.response.status}): ${error.response.statusText}`);
+    }
+    
+    // Default error
+    throw new Error('Failed to confirm two-factor authentication');
   }
 };
 
@@ -393,6 +470,7 @@ export default {
   getTelegramConfig,
   initTelegramAuth,
   confirmTelegramCode,
+  confirm2FAPassword,  // Added new function to the default export
   fetchGroups,
   addGroup,
   updateGroupStatus,

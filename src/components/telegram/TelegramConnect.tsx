@@ -4,9 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Shield, AlertCircle } from 'lucide-react';
+import { Shield, AlertCircle, Lock } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { initTelegramAuth, confirmTelegramCode, isConnectedToTelegram, getTelegramConfig, disconnectTelegram } from '@/services/telegramService';
+import { initTelegramAuth, confirmTelegramCode, isConnectedToTelegram, getTelegramConfig, disconnectTelegram, confirm2FAPassword } from '@/services/telegramService';
 
 interface TelegramConnectProps {
   onConnectionStateChange?: (state: boolean) => void;
@@ -18,8 +18,10 @@ const TelegramConnect = ({ onConnectionStateChange }: TelegramConnectProps) => {
   const [apiHash, setApiHash] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
+  const [password, setPassword] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [awaitingCode, setAwaitingCode] = useState(false);
+  const [awaiting2FA, setAwaiting2FA] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -124,6 +126,14 @@ const TelegramConnect = ({ onConnectionStateChange }: TelegramConnectProps) => {
           title: "Connection successful",
           description: "Your Telegram account has been connected successfully",
         });
+      } else if (result.needs2FA) {
+        // Handle 2FA requirement
+        setAwaitingCode(false);
+        setAwaiting2FA(true);
+        toast({
+          title: "Two-factor authentication required",
+          description: "Please enter your two-factor authentication password",
+        });
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -139,6 +149,53 @@ const TelegramConnect = ({ onConnectionStateChange }: TelegramConnectProps) => {
       setError(userError);
       toast({
         title: "Verification failed",
+        description: userError,
+        variant: "destructive",
+      });
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const handle2FAVerify = async () => {
+    // Reset error state
+    setError(null);
+
+    if (!password) {
+      setError("Please enter your two-factor authentication password");
+      toast({
+        title: "Password required",
+        description: "Please enter your two-factor authentication password",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsConnecting(true);
+    
+    try {
+      const result = await confirm2FAPassword(password);
+      
+      if (result.success) {
+        setIsConnected(true);
+        setAwaiting2FA(false);
+        toast({
+          title: "Connection successful",
+          description: "Your Telegram account has been connected successfully",
+        });
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error("2FA error:", error);
+      
+      // More specific error message for 2FA issues
+      const userError = errorMessage.includes('PASSWORD_HASH_INVALID') 
+        ? 'The password is incorrect. Please try again.'
+        : `Two-factor authentication failed: ${errorMessage}`;
+      
+      setError(userError);
+      toast({
+        title: "Two-factor authentication failed",
         description: userError,
         variant: "destructive",
       });
@@ -204,6 +261,45 @@ const TelegramConnect = ({ onConnectionStateChange }: TelegramConnectProps) => {
                 </Button>
               </div>
             </div>
+          ) : awaiting2FA ? (
+            <>
+              <div className="p-4 rounded-md bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 mb-4">
+                <div className="flex items-center">
+                  <Lock className="h-5 w-5 text-amber-600 dark:text-amber-400 mr-2" />
+                  <div>
+                    <p className="font-medium text-amber-800 dark:text-amber-400">
+                      Two-factor authentication required
+                    </p>
+                    <p className="text-sm text-amber-700 dark:text-amber-500 mt-0.5">
+                      Please enter your two-factor authentication password to continue
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <label htmlFor="2fa-password" className="text-sm font-medium">
+                  Two-factor Authentication Password
+                </label>
+                <Input 
+                  id="2fa-password" 
+                  type="password"
+                  placeholder="Enter your 2FA password" 
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+
+              <div className="pt-2">
+                <Button 
+                  onClick={handle2FAVerify} 
+                  disabled={isConnecting}
+                  className="w-full"
+                >
+                  {isConnecting ? 'Verifying...' : 'Submit Password'}
+                </Button>
+              </div>
+            </>
           ) : !awaitingCode ? (
             <>
               <div className="grid grid-cols-2 gap-4">

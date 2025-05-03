@@ -201,17 +201,31 @@ exports.confirmAuth = async (req, res) => {
     console.log(`Attempting to sign in with code for ${phoneNumber}`);
     
     try {
-      // Sign in with the code
-      await client.signIn({
-        phoneNumber,
-        phoneCode: code, 
-        phoneCodeHash
-      });
+      // Fix: Using the correct method from the telegram library
+      const signInResult = await client.invoke(
+        new Api.auth.SignIn({
+          phoneNumber: phoneNumber,
+          phoneCodeHash: phoneCodeHash,
+          phoneCode: code
+        })
+      );
       
-      // Check if 2FA is needed (password)
-      const isPasswordNeeded = await client.isUserAuthorized();
+      console.log('Sign in result:', signInResult);
       
-      if (!isPasswordNeeded) {
+      // Check if 2FA is needed
+      let needs2FA = false;
+      try {
+        const isAuthorized = await client.checkAuthorization();
+        if (!isAuthorized) {
+          needs2FA = true;
+        }
+      } catch (error) {
+        if (error.message.includes('SESSION_PASSWORD_NEEDED')) {
+          needs2FA = true;
+        }
+      }
+      
+      if (needs2FA) {
         // Handle 2FA if needed
         console.log(`2FA needed for ${phoneNumber}, asking for password`);
         return res.status(200).json({ 
@@ -256,12 +270,20 @@ exports.confirmAuth = async (req, res) => {
         });
       }
       
-      // Generic error
-      res.status(500).json({ error: `Error during sign in: ${error.message}` });
+      // Generic error with detailed message
+      res.status(500).json({ 
+        error: `Error during sign in: ${error.message}`,
+        details: error.toString(),
+        stack: error.stack
+      });
     }
   } catch (error) {
     console.error('Error confirming auth:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      error: error.message,
+      details: error.toString(),
+      stack: error.stack 
+    });
   }
 };
 
@@ -283,8 +305,15 @@ exports.confirm2FA = async (req, res) => {
     console.log(`Attempting 2FA login for ${phoneNumber}`);
     
     try {
-      // Submit 2FA password
-      await client.checkPassword(password);
+      // Get 2FA info first
+      const passwordInfo = await client.invoke(new Api.account.GetPassword());
+      
+      // Calculate the 2FA hash
+      const checkPasswordResult = await client.invoke(
+        new Api.auth.CheckPassword({
+          password: await client.computePasswordHash(password, passwordInfo)
+        })
+      );
       
       // Save the session string to a file
       const sessionString = client.session.save();
@@ -297,7 +326,10 @@ exports.confirm2FA = async (req, res) => {
       delete pendingAuth[phoneNumber];
 
       console.log(`Successfully authenticated with 2FA for ${phoneNumber}`);
-      res.status(200).json({ success: true });
+      res.status(200).json({ 
+        success: true,
+        details: 'Two-factor authentication successful'
+      });
     } catch (error) {
       console.error('Error during 2FA login:', error);
       
@@ -308,12 +340,20 @@ exports.confirm2FA = async (req, res) => {
         return res.status(400).json({ error: 'The password is incorrect.' });
       }
       
-      // Generic error
-      res.status(500).json({ error: `Error during 2FA login: ${error.message}` });
+      // Generic error with more details for debugging
+      res.status(500).json({ 
+        error: `Error during 2FA login: ${error.message}`,
+        details: error.toString(),
+        stack: error.stack 
+      });
     }
   } catch (error) {
     console.error('Error confirming 2FA:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      error: error.message,
+      details: error.toString(),
+      stack: error.stack 
+    });
   }
 };
 

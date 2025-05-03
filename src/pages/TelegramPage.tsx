@@ -39,18 +39,23 @@ const TelegramPage = () => {
         // Check if it's a network error (backend not available)
         if (error.message.includes('Network error')) {
           setBackendError('Cannot connect to backend server. Please ensure the server is running.');
+          
+          toast({
+            title: "Backend Connection Error",
+            description: "Cannot connect to backend server. Please ensure the server is running.",
+            variant: "destructive",
+          });
         }
         
         // Authentication errors
         if (error.message.includes('Authentication error')) {
           setIsConnected(false);
+          toast({
+            title: "Authentication Error",
+            description: error.message,
+            variant: "destructive",
+          });
         }
-        
-        toast({
-          title: "Failed to load groups",
-          description: error.message,
-          variant: "destructive",
-        });
       }
     }
   });
@@ -68,6 +73,12 @@ const TelegramPage = () => {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Error adding group:', error);
+      
+      // Check if it's a backend connection error
+      if (errorMessage.includes('Network error')) {
+        setBackendError('Cannot connect to backend server. Please ensure the server is running.');
+      }
+      
       toast({
         title: "Failed to add group",
         description: errorMessage,
@@ -88,6 +99,12 @@ const TelegramPage = () => {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Error toggling group status:', error);
+      
+      // Check if it's a backend connection error
+      if (errorMessage.includes('Network error')) {
+        setBackendError('Cannot connect to backend server. Please ensure the server is running.');
+      }
+      
       toast({
         title: "Status update failed",
         description: errorMessage,
@@ -108,11 +125,27 @@ const TelegramPage = () => {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Error removing group:', error);
+      
+      // Check if it's a backend connection error
+      if (errorMessage.includes('Network error')) {
+        setBackendError('Cannot connect to backend server. Please ensure the server is running.');
+      }
+      
       toast({
         title: "Removal failed",
         description: errorMessage,
         variant: "destructive",
       });
+    }
+  };
+
+  const handleConnectionStateChange = (connected: boolean) => {
+    setIsConnected(connected);
+    if (connected) {
+      // Clear backend error when successfully connected
+      setBackendError(null);
+      // Refetch groups when connection state changes to connected
+      refetchGroups();
     }
   };
 
@@ -132,7 +165,7 @@ const TelegramPage = () => {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <TelegramConnect onConnectionStateChange={setIsConnected} />
+        <TelegramConnect onConnectionStateChange={handleConnectionStateChange} />
         <TelegramGroupList 
           groups={groups}
           isLoading={isLoading}
