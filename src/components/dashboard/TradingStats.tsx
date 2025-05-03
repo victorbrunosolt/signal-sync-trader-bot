@@ -3,19 +3,30 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TradingStats as TradingStatsType } from '@/types/tradingTypes';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { AlertCircle } from 'lucide-react';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 export interface TradingStatsProps {
   stats: TradingStatsType;
   isLoading: boolean;
+  error?: string | null;
 }
 
-const TradingStats = ({ stats, isLoading }: TradingStatsProps) => {
+const TradingStats = ({ stats, isLoading, error }: TradingStatsProps) => {
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-lg">Trading Statistics</CardTitle>
       </CardHeader>
       <CardContent>
+        {error && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        
         {isLoading ? (
           <div className="grid grid-cols-2 gap-4">
             <Skeleton className="h-20 w-full" />

@@ -3,19 +3,29 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Trash2, RefreshCw } from 'lucide-react';
+import { PlusCircle, Trash2, RefreshCw, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { fetchGroups, updateGroupStatus, removeGroup, TelegramGroup } from '@/services/telegramService';
 
 interface TelegramGroupListProps {
   groups: TelegramGroup[];
+  isLoading?: boolean;
+  error?: string | null;
   onAddGroup: () => void;
   onToggleGroup: (id: string, active: boolean) => void;
   onRemoveGroup: (id: string) => void;
 }
 
-const TelegramGroupList = ({ groups = [], onAddGroup, onToggleGroup, onRemoveGroup }: TelegramGroupListProps) => {
+const TelegramGroupList = ({ 
+  groups = [], 
+  isLoading = false, 
+  error = null,
+  onAddGroup, 
+  onToggleGroup, 
+  onRemoveGroup 
+}: TelegramGroupListProps) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [localGroups, setLocalGroups] = useState<TelegramGroup[]>(groups);
@@ -93,18 +103,29 @@ const TelegramGroupList = ({ groups = [], onAddGroup, onToggleGroup, onRemoveGro
       <CardHeader className="pb-3 flex flex-row items-center justify-between">
         <CardTitle className="text-lg">Telegram Groups</CardTitle>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={handleRefresh} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          <Button size="sm" variant="outline" onClick={handleRefresh} disabled={loading || isLoading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading || isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          <Button size="sm" onClick={onAddGroup}>
+          <Button size="sm" onClick={onAddGroup} disabled={isLoading}>
             <PlusCircle className="h-4 w-4 mr-2" />
             Add Group
           </Button>
         </div>
       </CardHeader>
       <CardContent>
-        {localGroups.length === 0 ? (
+        {error && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        
+        {isLoading ? (
+          <div className="py-8 text-center">
+            <p className="text-muted-foreground">Loading groups...</p>
+          </div>
+        ) : localGroups.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-muted-foreground mb-4">No groups added yet</p>
             <Button variant="outline" size="sm" onClick={onAddGroup}>

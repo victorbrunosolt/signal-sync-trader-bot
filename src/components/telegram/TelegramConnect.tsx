@@ -8,7 +8,11 @@ import { Shield, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { initTelegramAuth, confirmTelegramCode, isConnectedToTelegram, getTelegramConfig, disconnectTelegram } from '@/services/telegramService';
 
-const TelegramConnect = () => {
+interface TelegramConnectProps {
+  onConnectionStateChange?: (state: boolean) => void;
+}
+
+const TelegramConnect = ({ onConnectionStateChange }: TelegramConnectProps) => {
   const { toast } = useToast();
   const [apiId, setApiId] = useState('');
   const [apiHash, setApiHash] = useState('');
@@ -30,6 +34,13 @@ const TelegramConnect = () => {
       setPhoneNumber(config.phoneNumber);
     }
   }, []);
+
+  // Notify parent component of connection state changes
+  useEffect(() => {
+    if (onConnectionStateChange) {
+      onConnectionStateChange(isConnected);
+    }
+  }, [isConnected, onConnectionStateChange]);
 
   const handleConnect = async () => {
     // Reset error state
