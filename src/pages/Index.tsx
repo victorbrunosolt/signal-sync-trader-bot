@@ -7,16 +7,41 @@ import PerformanceChart from '@/components/dashboard/PerformanceChart';
 import RecentSignals from '@/components/dashboard/RecentSignals';
 import ActivePositions from '@/components/dashboard/ActivePositions';
 import { useQuery } from '@tanstack/react-query';
-import { fetchAccountBalance, fetchActivePositions, fetchPerformanceData, fetchTradingStats, isConnectedToBybit } from '@/services/bybitService';
+import { 
+  fetchAccountBalance, 
+  fetchActivePositions, 
+  fetchPerformanceData, 
+  fetchTradingStats, 
+  isConnectedToBybit 
+} from '@/services/bybitService';
 import { useToast } from '@/hooks/use-toast';
 import { AlertTriangle } from 'lucide-react';
 import { Position } from '@/types/bybitTypes';
+import { checkBackendHealth } from '@/services/bybit/apiService';
 
 const Index = () => {
   const { toast } = useToast();
   const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
   const [backendConnected, setBackendConnected] = useState<boolean>(true);
   const [isExchangeConnected, setIsExchangeConnected] = useState<boolean>(false);
+  
+  // Check backend health on mount
+  useEffect(() => {
+    const checkHealth = async () => {
+      const isHealthy = await checkBackendHealth();
+      setBackendConnected(isHealthy);
+      
+      if (!isHealthy) {
+        toast({
+          title: "Backend Connection Issue",
+          description: "Could not connect to the backend server. Some features may be limited.",
+          variant: "warning",
+        });
+      }
+    };
+    
+    checkHealth();
+  }, [toast]);
   
   // Check if already connected to exchange
   useEffect(() => {
@@ -123,16 +148,16 @@ const Index = () => {
     }
   });
 
-  // Convert positions to the format expected by ActivePositions component
-  const positions: Position[] = positionsData.map(pos => ({
-    id: pos.id || `pos-${pos.symbol}-${Date.now()}`,
+  // Convert Bybit positions to the format expected by ActivePositions component
+  const positions = positionsData.map(pos => ({
+    id: pos.id,
     symbol: pos.symbol,
-    type: pos.side === 'Buy' ? 'LONG' : 'SHORT',
+    type: pos.side === 'Buy' ? 'LONG' : 'SHORT' as 'LONG' | 'SHORT',
     entryPrice: pos.entryPrice,
-    currentPrice: pos.markPrice,
+    currentPrice: pos.currentPrice,
     size: pos.size,
     pnl: pos.pnl,
-    pnlPercentage: pos.roe
+    pnlPercentage: pos.pnlPercentage
   }));
 
   const emptyStats = {
@@ -207,7 +232,7 @@ const Index = () => {
           <PerformanceChart
             title="Performance"
             data={performanceData || emptyPerformanceData}
-            selectedTimeframe={timeframe}
+            timeframe={timeframe}
             onTimeframeChange={setTimeframe}
             isLoading={isPerformanceLoading}
             tooltipFormatter={(value) => `$${value.toFixed(2)}`}

@@ -1,6 +1,7 @@
 
 import { useBackendOrDirect, apiGet } from './apiService';
 import { isConnectedToBybit } from './authService';
+import { AccountBalance, BybitResponse } from '@/types/bybitTypes';
 
 export const fetchAccountBalance = async (): Promise<number> => {
   return useBackendOrDirect<number>('/balance', async () => {
@@ -12,10 +13,10 @@ export const fetchAccountBalance = async (): Promise<number> => {
       const endpoint = '/v5/account/wallet-balance';
       const params = { accountType: 'UNIFIED' };
       
-      const result = await apiGet(endpoint, params);
+      const result = await apiGet<BybitResponse<{ list: AccountBalance[] }>>(endpoint, params);
       
-      if (result?.list?.length > 0) {
-        const balance = result.list[0].totalEquity;
+      if (result?.result?.list?.length > 0) {
+        const balance = result.result.list[0].totalEquity;
         return parseFloat(balance);
       }
       

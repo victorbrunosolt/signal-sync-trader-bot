@@ -1,7 +1,8 @@
 
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { isConnectedToBybit, getCredentials } from './authService';
 import { getApiUrl, getHeaders, BACKEND_API_URL } from './utils';
+import { BybitResponse } from '@/types/bybitTypes';
 
 // Attempt to use backend first, fallback to direct API
 export const useBackendOrDirect = async <T>(
@@ -16,12 +17,20 @@ export const useBackendOrDirect = async <T>(
     });
     return response.data;
   } catch (error) {
-    console.log('Backend API call failed, trying direct API:', error);
+    const axiosError = error as AxiosError;
+    console.log('Backend API call failed, trying direct API:', axiosError.message);
+    
+    // Check if it's a network error indicating backend is down
+    if (axiosError.code === 'ECONNABORTED' || axiosError.code === 'ERR_NETWORK') {
+      console.log('Backend appears to be unreachable, falling back to direct API');
+    }
+    
     // Fall back to direct API
     if (!isConnectedToBybit()) {
       console.log('Not connected to Bybit API, returning default data');
       return defaultValue;
     }
+    
     return directFn();
   }
 };
@@ -38,16 +47,35 @@ export const apiGet = async <T>(
   const credentials = getCredentials();
   const url = `${getApiUrl(credentials.isTestnet)}${endpoint}`;
   
-  const response = await axios.get(url, {
-    params,
-    headers: getHeaders(params, credentials)
-  });
-  
-  if (response.data?.retCode === 0) {
-    return response.data.result;
+  try {
+    const response = await axios.get<T>(url, {
+      params,
+      headers: getHeaders(params, credentials)
+    });
+    
+    if ('data' in response && response.data) {
+      const bybitResponse = response.data as unknown as BybitResponse<any>;
+      if (bybitResponse.retCode === 0) {
+        return response.data;
+      } else {
+        throw new Error(bybitResponse.retMsg || 'API returned error code');
+      }
+    }
+    
+    throw new Error('Invalid API response format');
+  } catch (error) {
+    const axiosError = error as AxiosError;
+    if (axiosError.response) {
+      console.error('API error response:', axiosError.response.data);
+      throw new Error(`API Error: ${JSON.stringify(axiosError.response.data)}`);
+    } else if (axiosError.request) {
+      console.error('No response received:', axiosError.request);
+      throw new Error('No response received from API server');
+    } else {
+      console.error('Request error:', axiosError.message);
+      throw new Error(`Request error: ${axiosError.message}`);
+    }
   }
-  
-  throw new Error(response.data?.retMsg || 'Unknown API error');
 };
 
 // Generic API caller for POST requests
@@ -62,15 +90,47 @@ export const apiPost = async <T>(
   const credentials = getCredentials();
   const url = `${getApiUrl(credentials.isTestnet)}${endpoint}`;
   
-  const response = await axios.post(
-    url,
-    data,
-    { headers: getHeaders(data, credentials) }
-  );
-  
-  if (response.data?.retCode === 0) {
-    return response.data.result;
+  try {
+    const response = await axios.post<T>(
+      url,
+      data,
+      { headers: getHeaders(data, credentials) }
+    );
+    
+    if ('data' in response && response.data) {
+      const bybitResponse = response.data as unknown as BybitResponse<any>;
+      if (bybitResponse.retCode === 0) {
+        return response.data;
+      } else {
+        throw new Error(bybitResponse.retMsg || 'API returned error code');
+      }
+    }
+    
+    throw new Error('Invalid API response format');
+  } catch (error) {
+    const axiosError = error as AxiosError;
+    if (axiosError.response) {
+      console.error('API error response:', axiosError.response.data);
+      throw new Error(`API Error: ${JSON.stringify(axiosError.response.data)}`);
+    } else if (axiosError.request) {
+      console.error('No response received:', axiosError.request);
+      throw new Error('No response received from API server');
+    } else {
+      console.error('Request error:', axiosError.message);
+      throw new Error(`Request error: ${axiosError.message}`);
+    }
   }
-  
-  throw new Error(response.data?.retMsg || 'Unknown API error');
+};
+
+// Health check function to test if backend is reachable
+export const checkBackendHealth = async (): Promise<boolean> => {
+  try {
+    const response = await axios.get(`${BACKEND_API_URL}/health`, {
+      timeout: 2000 // 2 second timeout for health check
+    });
+    return response.status === 200;
+  } catch (error) {
+    console.log('Backend health check failed:', error);
+    return false;
+  }
 };

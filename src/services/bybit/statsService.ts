@@ -1,92 +1,114 @@
 
 import { useBackendOrDirect, apiGet } from './apiService';
 import { isConnectedToBybit } from './authService';
-import { TradingStats, PerformanceData } from '@/types/bybitTypes';
-import { fetchAccountBalance } from './accountService';
+import { TradingStats, PerformanceData, BybitResponse, ExecutionItem } from '@/types/bybitTypes';
 
 export const fetchTradingStats = async (): Promise<TradingStats> => {
-  const emptyStats = {
-    winRate: 0,
-    profitFactor: 0,
-    averageWin: 0,
-    averageLoss: 0,
-    tradesCount: 0
-  };
-  
   return useBackendOrDirect<TradingStats>('/stats', async () => {
     if (!isConnectedToBybit()) {
-      return emptyStats;
+      return {
+        winRate: 0,
+        profitFactor: 0,
+        averageWin: 0,
+        averageLoss: 0,
+        tradesCount: 0
+      };
     }
-    
+
     try {
       const endpoint = '/v5/execution/list';
-      const params = { category: 'linear', limit: 100 };
-      
-      const result = await apiGet(endpoint, params);
-      
-      const trades = result?.list || [];
-      
-      // Calculate trading statistics
-      let wins = 0;
-      let losses = 0;
-      let totalWinAmount = 0;
-      let totalLossAmount = 0;
-      
-      trades.forEach((trade: any) => {
-        const pnl = parseFloat(trade.closedPnl || '0');
-        if (pnl > 0) {
-          wins++;
-          totalWinAmount += pnl;
-        } else if (pnl < 0) {
-          losses++;
-          totalLossAmount += Math.abs(pnl);
-        }
-      });
-      
-      const totalTrades = trades.length;
-      const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
-      const profitFactor = totalLossAmount > 0 ? totalWinAmount / totalLossAmount : wins > 0 ? 999 : 0;
-      const averageWin = wins > 0 ? totalWinAmount / wins : 0;
-      const averageLoss = losses > 0 ? totalLossAmount / losses : 0;
+      const params = { 
+        category: 'linear', 
+        limit: 100 
+      };
+
+      const result = await apiGet<BybitResponse<{ list: ExecutionItem[] }>>(endpoint, params);
+
+      if (result?.result?.list) {
+        const trades = result.result.list;
+        
+        // Calculate trading statistics
+        let wins = 0;
+        let losses = 0;
+        let totalWinAmount = 0;
+        let totalLossAmount = 0;
+        
+        trades.forEach(trade => {
+          const pnl = parseFloat(trade.closedPnl || '0');
+          if (pnl > 0) {
+            wins++;
+            totalWinAmount += pnl;
+          } else if (pnl < 0) {
+            losses++;
+            totalLossAmount += Math.abs(pnl);
+          }
+        });
+        
+        const totalTrades = wins + losses;
+        const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
+        const profitFactor = totalLossAmount > 0 ? totalWinAmount / totalLossAmount : wins > 0 ? 999 : 0;
+        const averageWin = wins > 0 ? totalWinAmount / wins : 0;
+        const averageLoss = losses > 0 ? totalLossAmount / losses : 0;
+        
+        return {
+          winRate,
+          profitFactor,
+          averageWin,
+          averageLoss,
+          tradesCount: totalTrades
+        };
+      }
       
       return {
-        winRate,
-        profitFactor,
-        averageWin,
-        averageLoss,
-        tradesCount: totalTrades
+        winRate: 0,
+        profitFactor: 0,
+        averageWin: 0,
+        averageLoss: 0,
+        tradesCount: 0
       };
     } catch (error) {
       console.error('Error fetching trading stats:', error);
       throw new Error('Failed to fetch trading stats');
     }
-  }, emptyStats);
+  }, {
+    winRate: 0,
+    profitFactor: 0,
+    averageWin: 0,
+    averageLoss: 0,
+    tradesCount: 0
+  });
 };
 
-export const fetchPerformanceData = async (timeframe: 'daily' | 'weekly' | 'monthly' | 'yearly'): Promise<PerformanceData> => {
-  const emptyPerformanceData = {
-    daily: [],
-    weekly: [],
-    monthly: [],
-    yearly: []
-  };
-  
+export const fetchPerformanceData = async (timeframe: 'daily' | 'weekly' | 'monthly' = 'weekly'): Promise<PerformanceData> => {
   return useBackendOrDirect<PerformanceData>(`/performance?timeframe=${timeframe}`, async () => {
+    // Create empty performance data structure
+    const emptyData: PerformanceData = {
+      daily: [],
+      weekly: [],
+      monthly: [],
+      yearly: []
+    };
+    
     if (!isConnectedToBybit()) {
-      return emptyPerformanceData;
+      return emptyData;
     }
     
     try {
-      // In a production app, you'd likely have an endpoint to fetch historical balance data
-      // For now, we'll create synthetic data based on the current balance
+      // Get current balance to create synthetic performance data
+      const endpoint = '/v5/account/wallet-balance';
+      const params = { accountType: 'UNIFIED' };
       
-      const currentBalance = await fetchAccountBalance();
-      let performanceData: PerformanceData = {
-        daily: [],
-        weekly: [],
-        monthly: [],
-        yearly: []
-      };
+      const result = await apiGet<BybitResponse<{ list: any[] }>>(endpoint, params);
+      
+      let currentBalance = 0;
+      if (result?.result?.list?.length > 0) {
+        currentBalance = parseFloat(result.result.list[0].totalEquity || '0');
+      }
+      
+      if (currentBalance <= 0) currentBalance = 1000; // Fallback value for demo
+      
+      // Generate synthetic performance data based on current balance
+      const performanceData = { ...emptyData };
       
       // Generate daily data (24 hours)
       performanceData.daily = Array.from({ length: 24 }, (_, i) => {
@@ -131,5 +153,10 @@ export const fetchPerformanceData = async (timeframe: 'daily' | 'weekly' | 'mont
       console.error('Error fetching performance data:', error);
       throw new Error('Failed to fetch performance data');
     }
-  }, emptyPerformanceData);
+  }, {
+    daily: [],
+    weekly: [],
+    monthly: [],
+    yearly: []
+  });
 };

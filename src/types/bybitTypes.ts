@@ -68,3 +68,60 @@ export interface BybitCredentials {
   isConnected: boolean;
   connectedAt?: string;
 }
+
+// Add a type for API responses
+export interface BybitResponse<T> {
+  retCode: number;
+  retMsg: string;
+  result: T;
+  retExtInfo?: any;
+  time: number;
+}
+
+// Add specific types for API data structures
+export interface AccountBalance {
+  totalEquity: string;
+  accountType: string;
+  totalMarginBalance: string;
+  totalAvailableBalance: string;
+  accountIMRate: string;
+  accountMMRate: string;
+  totalPerpUPL: string;
+  totalInitialMargin: string;
+  totalMaintenanceMargin: string;
+  [key: string]: any;
+}
+
+export interface PositionItem {
+  symbol: string;
+  side: 'Buy' | 'Sell';
+  size: string;
+  entryPrice: string;
+  markPrice: string;
+  unrealisedPnl: string;
+  roe: string;
+  leverage: string;
+  [key: string]: any;
+}
+
+export interface ExecutionItem {
+  symbol: string;
+  side: 'Buy' | 'Sell';
+  execPrice: string;
+  execQty: string;
+  execFee: string;
+  execTime: string;
+  closedPnl: string;
+  [key: string]: any;
+}
+
+export interface OrderItem {
+  symbol: string;
+  side: 'Buy' | 'Sell';
+  price: string;
+  qty: string;
+  orderId: string;
+  orderStatus: string;
+  createTime: string;
+  [key: string]: any;
+}
