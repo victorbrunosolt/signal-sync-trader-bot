@@ -16,7 +16,6 @@ import {
 } from '@/services/bybitService';
 import { useToast } from '@/hooks/use-toast';
 import { AlertTriangle } from 'lucide-react';
-import { Position } from '@/types/bybitTypes';
 import { checkBackendHealth } from '@/services/bybit/apiService';
 
 const Index = () => {
@@ -35,7 +34,8 @@ const Index = () => {
         toast({
           title: "Backend Connection Issue",
           description: "Could not connect to the backend server. Some features may be limited.",
-          variant: "warning",
+          // Fix the variant type - only "default" or "destructive" are allowed
+          variant: "default",
         });
       }
     };
@@ -232,7 +232,8 @@ const Index = () => {
           <PerformanceChart
             title="Performance"
             data={performanceData || emptyPerformanceData}
-            timeframe={timeframe}
+            // Remove the timeframe prop since it doesn't exist in PerformanceChartProps
+            currentTimeframe={timeframe}
             onTimeframeChange={setTimeframe}
             isLoading={isPerformanceLoading}
             tooltipFormatter={(value) => `$${value.toFixed(2)}`}

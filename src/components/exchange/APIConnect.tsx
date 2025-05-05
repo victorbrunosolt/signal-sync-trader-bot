@@ -4,10 +4,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Shield, Eye, EyeOff } from 'lucide-react';
+import { Shield, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { setCredentials, isConnectedToBybit, getExchangeEnvironment } from '@/services/bybitService';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { setCredentials, isConnectedToBybit, getExchangeEnvironment } from '@/services/bybit/authService';
+import axios from 'axios';
+import { BACKEND_API_URL } from '@/services/bybit/utils';
 
 const APIConnect = () => {
   const { toast } = useToast();
@@ -17,55 +20,110 @@ const APIConnect = () => {
   const [isTestnet, setIsTestnet] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [backendError, setBackendError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   
   // Load saved credentials and settings from localStorage on component mount
   useEffect(() => {
-    const savedSettings = localStorage.getItem('bybitApiSettings');
-    if (savedSettings) {
-      try {
-        const settings = JSON.parse(savedSettings);
-        setApiKey(settings.apiKey || '');
-        setApiSecret(settings.apiSecret || '');
-        setIsTestnet(settings.isTestnet || true);
-        setIsConnected(settings.isConnected || false);
-      } catch (error) {
-        console.error('Error parsing saved settings:', error);
+    const checkConnection = () => {
+      const savedSettings = localStorage.getItem('bybitApiSettings');
+      if (savedSettings) {
+        try {
+          const settings = JSON.parse(savedSettings);
+          setApiKey(settings.apiKey || '');
+          setApiSecret(settings.apiSecret || '');
+          setIsTestnet(settings.isTestnet === false ? false : true);
+          setIsConnected(settings.isConnected || false);
+        } catch (error) {
+          console.error('Error parsing saved settings:', error);
+        }
       }
-    }
+      
+      setIsConnected(isConnectedToBybit());
+    };
     
-    setIsConnected(isConnectedToBybit());
+    checkConnection();
+    
+    // Check connection status when window gains focus (in case of backend changes)
+    window.addEventListener('focus', checkConnection);
+    return () => {
+      window.removeEventListener('focus', checkConnection);
+    };
   }, []);
 
-  const handleConnect = () => {
-    if (!apiKey || !apiSecret) {
-      toast({
-        title: "Missing credentials",
-        description: "Please provide both API Key and Secret",
-        variant: "destructive",
-      });
-      return;
+  const validateCredentials = async (key: string, secret: string, testnet: boolean) => {
+    setValidationError(null);
+    
+    if (!key || !secret) {
+      setValidationError("API Key and Secret are required");
+      return false;
     }
-
-    setIsConnecting(true);
     
     try {
-      // Set credentials in the service
-      setCredentials(apiKey, apiSecret, isTestnet);
-      
-      setIsConnected(true);
-      setIsConnecting(false);
-      
-      toast({
-        title: "Successfully connected",
-        description: `Your Bybit account has been linked (${isTestnet ? 'Testnet' : 'Mainnet'} mode)`,
+      // First try to validate through backend 
+      const response = await axios.post(`${BACKEND_API_URL}/validateCredentials`, {
+        apiKey: key,
+        apiSecret: secret,
+        isTestnet: testnet
+      }, { 
+        timeout: 5000 // 5 second timeout
       });
-    } catch (error) {
+      
+      if (response.status === 200 && response.data.success) {
+        return true;
+      } else {
+        setValidationError(response.data.message || "Invalid API credentials");
+        return false;
+      }
+    } catch (error: any) {
+      // Determine if this is a server connection error or an API validation error
+      if (error.code === 'ECONNABORTED' || error.message.includes('Network Error')) {
+        setBackendError("Cannot reach backend server for credential validation");
+        // If backend is unavailable, store locally only with a warning
+        toast({
+          title: "Backend unavailable",
+          description: "API credentials will be stored locally only. Some features may be limited.",
+          variant: "default",
+        });
+        return true; // Allow connection but with warning
+      } else if (error.response && error.response.status === 401) {
+        setValidationError(error.response.data.message || "Invalid API credentials");
+        return false;
+      } else {
+        setValidationError("Error validating credentials: " + (error.message || "Unknown error"));
+        return false;
+      }
+    }
+  };
+
+  const handleConnect = async () => {
+    setIsConnecting(true);
+    setValidationError(null);
+    setBackendError(null);
+    
+    try {
+      // Validate credentials before saving
+      const isValid = await validateCredentials(apiKey, apiSecret, isTestnet);
+      
+      if (isValid) {
+        // Set credentials in the service
+        setCredentials(apiKey, apiSecret, isTestnet);
+        setIsConnected(true);
+        
+        toast({
+          title: "Successfully connected",
+          description: `Your Bybit account has been linked (${isTestnet ? 'Testnet' : 'Mainnet'} mode)`,
+        });
+      }
+    } catch (error: any) {
       console.error('Error connecting to Bybit:', error);
+      
       toast({
         title: "Connection error",
-        description: "Failed to connect to Bybit API",
+        description: error.message || "Failed to connect to Bybit API",
         variant: "destructive",
       });
+    } finally {
       setIsConnecting(false);
     }
   };
@@ -121,6 +179,12 @@ const APIConnect = () => {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
+          {backendError && (
+            <Alert variant="default" className="mb-4">
+              <AlertDescription>{backendError}</AlertDescription>
+            </Alert>
+          )}
+          
           {isConnected ? (
             <div className="space-y-4">
               <div className="p-4 rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
@@ -203,6 +267,12 @@ const APIConnect = () => {
                 </div>
               </div>
               
+              {validationError && (
+                <div className="p-3 rounded-md bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-xs text-red-800 dark:text-red-400">
+                  {validationError}
+                </div>
+              )}
+              
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label htmlFor="testnet-switch">Trading Environment</Label>
@@ -227,7 +297,12 @@ const APIConnect = () => {
                   disabled={isConnecting}
                   className="w-full"
                 >
-                  {isConnecting ? 'Connecting...' : 'Connect to Bybit'}
+                  {isConnecting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Connecting...
+                    </>
+                  ) : 'Connect to Bybit'}
                 </Button>
               </div>
               

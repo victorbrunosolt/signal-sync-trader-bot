@@ -16,10 +16,13 @@ if (!fs.existsSync(CREDENTIALS_DIR)) {
 const MAINNET_URL = 'https://api.bybit.com';
 const TESTNET_URL = 'https://api-testnet.bybit.com';
 
+// File path for credentials
+const CREDENTIALS_FILE = path.join(CREDENTIALS_DIR, 'bybit-credentials.json');
+
 // Helper to save credentials
 const saveCredentials = (key, secret, isTestnet) => {
   fs.writeFileSync(
-    path.join(CREDENTIALS_DIR, 'bybit-credentials.json'),
+    CREDENTIALS_FILE,
     JSON.stringify({ key, secret, isTestnet })
   );
 };
@@ -27,15 +30,26 @@ const saveCredentials = (key, secret, isTestnet) => {
 // Helper to load credentials
 const loadCredentials = () => {
   try {
-    if (fs.existsSync(path.join(CREDENTIALS_DIR, 'bybit-credentials.json'))) {
+    if (fs.existsSync(CREDENTIALS_FILE)) {
       return JSON.parse(
-        fs.readFileSync(path.join(CREDENTIALS_DIR, 'bybit-credentials.json'), 'utf8')
+        fs.readFileSync(CREDENTIALS_FILE, 'utf8')
       );
     }
   } catch (error) {
     console.error('Error loading credentials:', error);
   }
   return null;
+};
+
+// Helper to clear credentials
+const clearCredentials = () => {
+  try {
+    if (fs.existsSync(CREDENTIALS_FILE)) {
+      fs.unlinkSync(CREDENTIALS_FILE);
+    }
+  } catch (error) {
+    console.error('Error clearing credentials:', error);
+  }
 };
 
 // Get API URL based on testnet setting
@@ -71,21 +85,43 @@ const getHeaders = (apiKey, apiSecret, data = {}) => {
   };
 };
 
-// Save API credentials
-exports.saveApiCredentials = (req, res) => {
+// Public method to save API credentials
+exports.saveApiCredentials = (apiKey, apiSecret, isTestnet = true) => {
+  saveCredentials(apiKey, apiSecret, isTestnet);
+};
+
+// Public method to clear credentials
+exports.clearCredentials = () => {
+  clearCredentials();
+};
+
+// Public method to load credentials
+exports.loadCredentials = () => {
+  return loadCredentials();
+};
+
+// Validate API credentials
+exports.validateApiCredentials = async (apiKey, apiSecret, isTestnet = true) => {
   try {
-    const { apiKey, apiSecret, isTestnet } = req.body;
+    // Use wallet balance endpoint for validation
+    const endpoint = '/v5/account/wallet-balance';
+    const params = { accountType: 'UNIFIED' };
     
-    if (!apiKey || !apiSecret) {
-      return res.status(400).json({ error: 'API key and secret are required' });
-    }
+    const response = await axios.get(
+      `${getApiUrl(isTestnet)}${endpoint}`,
+      { 
+        params,
+        headers: getHeaders(apiKey, apiSecret, params),
+        timeout: 5000 // 5 second timeout
+      }
+    );
     
-    saveCredentials(apiKey, apiSecret, isTestnet);
-    
-    res.status(200).json({ success: true });
+    // If we get a valid response, credentials are good
+    return response.data?.retCode === 0;
   } catch (error) {
-    console.error('Error saving API credentials:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Error validating API credentials:', error);
+    // Return false if there's any error
+    return false;
   }
 };
 
@@ -461,41 +497,7 @@ exports.getOrders = async (req, res) => {
 };
 
 // Set credentials directly from frontend
-exports.setCredentials = async (req, res) => {
-  try {
-    const { apiKey, apiSecret, isTestnet } = req.body;
-    
-    if (!apiKey || !apiSecret) {
-      return res.status(400).json({ error: 'API key and secret are required' });
-    }
-    
-    // Save credentials
-    saveCredentials(apiKey, apiSecret, isTestnet);
-    
-    // Test the credentials with a simple call
-    const endpoint = '/v5/account/wallet-balance';
-    const params = { accountType: 'UNIFIED' };
-    
-    try {
-      const response = await axios.get(
-        `${getApiUrl(isTestnet)}${endpoint}`,
-        { 
-          params,
-          headers: getHeaders(apiKey, apiSecret, params)
-        }
-      );
-      
-      if (response.data?.retCode === 0) {
-        return res.status(200).json({ success: true });
-      } else {
-        return res.status(401).json({ error: 'Invalid API credentials' });
-      }
-    } catch (error) {
-      console.error('Error testing API credentials:', error);
-      return res.status(401).json({ error: 'Invalid API credentials' });
-    }
-  } catch (error) {
-    console.error('Error setting credentials:', error);
-    res.status(500).json({ error: error.message });
-  }
+exports.setCredentials = (apiKey, apiSecret, isTestnet) => {
+  saveCredentials(apiKey, apiSecret, isTestnet);
 };
+

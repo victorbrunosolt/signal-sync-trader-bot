@@ -60,13 +60,28 @@ router.post('/setCredentials', (req, res) => {
   }
 });
 
+// Clear credentials endpoint
+router.post('/clearCredentials', (req, res) => {
+  try {
+    req.app.locals.bybitCredentials = null;
+    bybitController.clearCredentials();
+    res.status(200).json({ success: true, message: 'Credentials cleared successfully' });
+  } catch (error) {
+    console.error('Error clearing credentials:', error);
+    res.status(500).json({ error: error.message || 'Internal Server Error' });
+  }
+});
+
 // Validate credentials endpoint
 router.post('/validateCredentials', async (req, res) => {
   try {
     const { apiKey, apiSecret, isTestnet } = req.body;
     
     if (!apiKey || !apiSecret) {
-      return res.status(400).json({ error: 'API key and secret are required' });
+      return res.status(400).json({ 
+        success: false, 
+        error: 'API key and secret are required' 
+      });
     }
     
     const isValid = await bybitController.validateApiCredentials(
@@ -76,16 +91,23 @@ router.post('/validateCredentials', async (req, res) => {
     );
     
     if (isValid) {
-      res.status(200).json({ success: true, message: 'Credentials are valid' });
+      res.status(200).json({ 
+        success: true,
+        message: 'Credentials are valid'
+      });
     } else {
       res.status(401).json({ 
+        success: false,
         error: 'Invalid credentials',
         message: 'Could not authenticate with the provided API key and secret'
       });
     }
   } catch (error) {
     console.error('Error validating credentials:', error);
-    res.status(500).json({ error: error.message || 'Internal Server Error' });
+    res.status(500).json({ 
+      success: false,
+      error: error.message || 'Internal Server Error'
+    });
   }
 });
 
