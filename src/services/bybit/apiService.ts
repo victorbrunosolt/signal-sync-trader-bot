@@ -1,5 +1,7 @@
 
 import axios from 'axios';
+import { getCredentials } from './authService';
+import { getApiUrl, getHeaders } from './utils';
 
 // Base URL for backend API
 export const BACKEND_API_URL = 'http://localhost:3000/api/bybit';
@@ -24,6 +26,85 @@ export const checkBackendHealth = async (): Promise<boolean> => {
   } catch (error) {
     console.error('Backend health check failed:', error);
     return false;
+  }
+};
+
+// Utility to decide whether to use backend or direct API
+export const useBackendOrDirect = async <T>(
+  backendEndpoint: string, 
+  directApiCall: () => Promise<T>,
+  fallbackValue: T
+): Promise<T> => {
+  // Try backend first
+  try {
+    const isHealthy = await checkBackendHealth();
+    if (isHealthy) {
+      const backendResponse = await get<T>(backendEndpoint);
+      return backendResponse;
+    }
+  } catch (error) {
+    console.warn('Backend unavailable, falling back to direct API call:', error);
+  }
+  
+  // Fall back to direct API call if backend fails
+  try {
+    return await directApiCall();
+  } catch (error) {
+    console.error('Direct API call failed:', error);
+    return fallbackValue;
+  }
+};
+
+// Direct API call to Bybit API (authenticated)
+export const apiGet = async <T>(endpoint: string, params: any = {}): Promise<T> => {
+  const credentials = getCredentials();
+  if (!credentials || !credentials.apiKey || !credentials.apiSecret) {
+    throw new Error('API credentials not set');
+  }
+  
+  const apiUrl = getApiUrl(credentials.isTestnet);
+  const headers = getHeaders(params, credentials);
+  
+  try {
+    const response = await axios.get<T>(`${apiUrl}${endpoint}`, { 
+      params,
+      headers
+    });
+    return response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      // Handle API errors and provide detailed messages
+      if (error.response?.data) {
+        throw new Error(`Bybit API error: ${JSON.stringify(error.response.data)}`);
+      }
+      throw new Error(`Network error: ${error.message}`);
+    }
+    throw error;
+  }
+};
+
+// Direct API call to Bybit API (authenticated) for POST requests
+export const apiPost = async <T>(endpoint: string, data: any = {}): Promise<T> => {
+  const credentials = getCredentials();
+  if (!credentials || !credentials.apiKey || !credentials.apiSecret) {
+    throw new Error('API credentials not set');
+  }
+  
+  const apiUrl = getApiUrl(credentials.isTestnet);
+  const headers = getHeaders(data, credentials);
+  
+  try {
+    const response = await axios.post<T>(`${apiUrl}${endpoint}`, data, { headers });
+    return response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      // Handle API errors and provide detailed messages
+      if (error.response?.data) {
+        throw new Error(`Bybit API error: ${JSON.stringify(error.response.data)}`);
+      }
+      throw new Error(`Network error: ${error.message}`);
+    }
+    throw error;
   }
 };
 
@@ -86,5 +167,8 @@ export const post = async <T>(endpoint: string, data: any = {}): Promise<T> => {
 export default {
   get,
   post,
+  apiGet,
+  apiPost,
+  useBackendOrDirect,
   checkBackendHealth
 };
