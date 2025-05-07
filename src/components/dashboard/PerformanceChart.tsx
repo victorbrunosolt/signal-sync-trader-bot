@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useState } from 'react';
@@ -19,7 +18,6 @@ export interface PerformanceChartProps {
   };
   tooltipFormatter?: (value: number) => string;
   isLoading?: boolean;
-  // Add these new props
   currentTimeframe?: 'daily' | 'weekly' | 'monthly' | 'yearly';
   onTimeframeChange?: (timeframe: 'daily' | 'weekly' | 'monthly' | 'yearly') => void;
 }
@@ -52,10 +50,10 @@ const PerformanceChart = ({
       return [];
     }
     
-    // Garantir que o timeframe existe no objeto data
+    // Ensure the timeframe exists in the data object
     const timeframeData = data[timeframe] || [];
     
-    // Se não houver dados, retornar um conjunto padrão 
+    // If no data, return a default set 
     if (timeframeData.length === 0) {
       switch(timeframe) {
         case 'daily':

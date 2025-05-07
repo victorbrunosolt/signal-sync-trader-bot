@@ -79,7 +79,7 @@ export const fetchTradingStats = async (): Promise<TradingStats> => {
   });
 };
 
-export const fetchPerformanceData = async (timeframe: 'daily' | 'weekly' | 'monthly' = 'weekly'): Promise<PerformanceData> => {
+export const fetchPerformanceData = async (timeframe: 'daily' | 'weekly' | 'monthly' | 'yearly' = 'weekly'): Promise<PerformanceData> => {
   return useBackendOrDirect<PerformanceData>(`/performance?timeframe=${timeframe}`, async () => {
     // Create empty performance data structure
     const emptyData: PerformanceData = {
