@@ -1,7 +1,7 @@
 
 import { useEffect, useState } from 'react';
 import { getExchangeEnvironment, isConnectedToBybit } from '@/services/bybit/authService';
-import { Shield, Loader2 } from 'lucide-react';
+import { Shield, Loader2, WifiOff, Check } from 'lucide-react';
 import { checkBackendHealth } from '@/services/bybit/apiService';
 
 const ConnectionStatus = () => {
@@ -52,7 +52,7 @@ const ConnectionStatus = () => {
         <span className={`h-2 w-2 rounded-full mr-2 ${isConnected ? 'bg-profit' : 'bg-yellow-500'}`}></span>
         <span className="opacity-90">
           {isConnected 
-            ? `Online - ${environment} Mode` 
+            ? `Connected - ${environment === 'Mainnet' ? 'Live' : 'Test'} Mode` 
             : 'Not connected to exchange'}
         </span>
       </div>
@@ -60,7 +60,7 @@ const ConnectionStatus = () => {
       {isConnected && (
         <div className="flex items-center mt-1 text-xs text-muted-foreground">
           <Shield className="h-3 w-3 mr-1" />
-          <span>{environment === 'Testnet' ? 'Using test funds' : 'Using real funds'}</span>
+          <span>{environment === 'Testnet' ? 'Using test funds only' : 'Using real funds - be careful'}</span>
         </div>
       )}
       
@@ -68,11 +68,12 @@ const ConnectionStatus = () => {
       <div className="flex items-center mt-2 text-xs">
         {isCheckingBackend ? (
           <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+        ) : isBackendConnected === null ? (
+          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+        ) : isBackendConnected ? (
+          <Check className="h-3 w-3 mr-1 text-profit" />
         ) : (
-          <span className={`h-2 w-2 rounded-full mr-2 ${
-            isBackendConnected === true ? 'bg-profit' : 
-            isBackendConnected === false ? 'bg-red-500' : 'bg-gray-500'
-          }`}></span>
+          <WifiOff className="h-3 w-3 mr-1 text-red-500" />
         )}
         <span className="opacity-90">
           {isBackendConnected === null ? 'Checking backend...' :

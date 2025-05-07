@@ -18,10 +18,34 @@ export interface PerformanceChartProps {
     yearly: ChartData[];
   };
   tooltipFormatter?: (value: number) => string;
+  isLoading?: boolean;
+  // Add these new props
+  currentTimeframe?: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  onTimeframeChange?: (timeframe: 'daily' | 'weekly' | 'monthly' | 'yearly') => void;
 }
 
-const PerformanceChart = ({ title = "Performance", data = { daily: [], weekly: [], monthly: [], yearly: [] }, tooltipFormatter }: PerformanceChartProps) => {
-  const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('weekly');
+const PerformanceChart = ({ 
+  title = "Performance", 
+  data = { daily: [], weekly: [], monthly: [], yearly: [] }, 
+  tooltipFormatter,
+  isLoading,
+  currentTimeframe,
+  onTimeframeChange
+}: PerformanceChartProps) => {
+  // Use the provided timeframe from props if available, otherwise manage internally
+  const [internalTimeframe, setInternalTimeframe] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('weekly');
+  
+  // Use either the external or internal timeframe state
+  const timeframe = currentTimeframe || internalTimeframe;
+  
+  // Handle timeframe change, either call the prop function or update internal state
+  const handleTimeframeChange = (newTimeframe: 'daily' | 'weekly' | 'monthly' | 'yearly') => {
+    if (onTimeframeChange) {
+      onTimeframeChange(newTimeframe);
+    } else {
+      setInternalTimeframe(newTimeframe);
+    }
+  };
   
   const getChartData = () => {
     if (!data) {
@@ -78,7 +102,7 @@ const PerformanceChart = ({ title = "Performance", data = { daily: [], weekly: [
             <Button 
               variant={timeframe === 'daily' ? 'default' : 'outline'} 
               size="sm"
-              onClick={() => setTimeframe('daily')}
+              onClick={() => handleTimeframeChange('daily')}
               className="text-xs h-7"
             >
               D
@@ -86,7 +110,7 @@ const PerformanceChart = ({ title = "Performance", data = { daily: [], weekly: [
             <Button 
               variant={timeframe === 'weekly' ? 'default' : 'outline'} 
               size="sm"
-              onClick={() => setTimeframe('weekly')}
+              onClick={() => handleTimeframeChange('weekly')}
               className="text-xs h-7"
             >
               W
@@ -94,7 +118,7 @@ const PerformanceChart = ({ title = "Performance", data = { daily: [], weekly: [
             <Button 
               variant={timeframe === 'monthly' ? 'default' : 'outline'} 
               size="sm"
-              onClick={() => setTimeframe('monthly')}
+              onClick={() => handleTimeframeChange('monthly')}
               className="text-xs h-7"
             >
               M
@@ -102,7 +126,7 @@ const PerformanceChart = ({ title = "Performance", data = { daily: [], weekly: [
             <Button 
               variant={timeframe === 'yearly' ? 'default' : 'outline'} 
               size="sm"
-              onClick={() => setTimeframe('yearly')}
+              onClick={() => handleTimeframeChange('yearly')}
               className="text-xs h-7"
             >
               Y
@@ -112,38 +136,44 @@ const PerformanceChart = ({ title = "Performance", data = { daily: [], weekly: [
       </CardHeader>
       <CardContent className="pt-4">
         <div className="h-[300px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={getChartData()}>
-              <XAxis 
-                dataKey="name" 
-                tick={{ fontSize: 12 }}
-                stroke="#666"
-                tickLine={{ stroke: '#666' }}
-              />
-              <YAxis 
-                tick={{ fontSize: 12 }}
-                stroke="#666"
-                tickLine={{ stroke: '#666' }}
-                tickFormatter={(tick) => `$${tick}`}
-              />
-              <Tooltip 
-                formatter={(value: number) => [formatTooltipValue(value), 'Value']}
-                contentStyle={{ 
-                  backgroundColor: 'hsl(var(--card))', 
-                  borderColor: 'hsl(var(--border))',
-                  borderRadius: '0.5rem' 
-                }}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="value" 
-                stroke="hsl(var(--primary))" 
-                strokeWidth={2}
-                dot={{ fill: 'hsl(var(--primary))' }}
-                activeDot={{ r: 6, fill: 'hsl(var(--primary))' }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {isLoading ? (
+            <div className="h-full w-full flex items-center justify-center">
+              <div className="text-muted-foreground">Loading chart data...</div>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={getChartData()}>
+                <XAxis 
+                  dataKey="name" 
+                  tick={{ fontSize: 12 }}
+                  stroke="#666"
+                  tickLine={{ stroke: '#666' }}
+                />
+                <YAxis 
+                  tick={{ fontSize: 12 }}
+                  stroke="#666"
+                  tickLine={{ stroke: '#666' }}
+                  tickFormatter={(tick) => `$${tick}`}
+                />
+                <Tooltip 
+                  formatter={(value: number) => [formatTooltipValue(value), 'Value']}
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(var(--card))', 
+                    borderColor: 'hsl(var(--border))',
+                    borderRadius: '0.5rem' 
+                  }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="value" 
+                  stroke="hsl(var(--primary))" 
+                  strokeWidth={2}
+                  dot={{ fill: 'hsl(var(--primary))' }}
+                  activeDot={{ r: 6, fill: 'hsl(var(--primary))' }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </CardContent>
     </Card>

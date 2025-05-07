@@ -20,7 +20,7 @@ import { checkBackendHealth } from '@/services/bybit/apiService';
 
 const Index = () => {
   const { toast } = useToast();
-  const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
+  const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('weekly');
   const [backendConnected, setBackendConnected] = useState<boolean>(true);
   const [isExchangeConnected, setIsExchangeConnected] = useState<boolean>(false);
   
@@ -34,7 +34,6 @@ const Index = () => {
         toast({
           title: "Backend Connection Issue",
           description: "Could not connect to the backend server. Some features may be limited.",
-          // Fix the variant type - only "default" or "destructive" are allowed
           variant: "default",
         });
       }
@@ -232,7 +231,7 @@ const Index = () => {
           <PerformanceChart
             title="Performance"
             data={performanceData || emptyPerformanceData}
-            // Remove the timeframe prop since it doesn't exist in PerformanceChartProps
+            // Now using the correct props according to the updated PerformanceChartProps interface
             currentTimeframe={timeframe}
             onTimeframeChange={setTimeframe}
             isLoading={isPerformanceLoading}
