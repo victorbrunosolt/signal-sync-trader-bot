@@ -76,6 +76,17 @@ let telegramConfig: TelegramConfig = initFromLocalStorage();
 
 // Check if connected to Telegram
 export const isConnectedToTelegram = (): boolean => {
+  // Revalidate from localStorage each time
+  try {
+    const savedConfig = localStorage.getItem(TELEGRAM_CONFIG_KEY);
+    if (savedConfig) {
+      const config = JSON.parse(savedConfig);
+      telegramConfig = config;
+      return config.isConnected || false;
+    }
+  } catch (error) {
+    console.error('Error checking Telegram connection status:', error);
+  }
   return telegramConfig.isConnected;
 };
 
@@ -254,13 +265,14 @@ export const fetchGroups = async (): Promise<TelegramGroup[]> => {
   }
   
   try {
-    // Call backend API
+    // Call backend API with necessary credentials
     const response = await axios.get(`${BACKEND_API_URL}/groups`, {
       params: {
         phoneNumber: telegramConfig.phoneNumber,
         apiId: telegramConfig.apiId,
         apiHash: telegramConfig.apiHash
-      }
+      },
+      timeout: 10000 // 10 second timeout
     });
     
     return response.data;
@@ -295,18 +307,31 @@ export const addGroup = async (name: string, url: string): Promise<TelegramGroup
   }
   
   try {
-    // Call backend API
+    // Call backend API with all necessary credentials
     const response = await axios.post(`${BACKEND_API_URL}/groups`, { 
       name, 
       url, 
       phoneNumber: telegramConfig.phoneNumber,
       apiId: telegramConfig.apiId,
       apiHash: telegramConfig.apiHash
+    }, {
+      timeout: 15000 // 15 second timeout for joining groups which can take time
     });
     
     return response.data;
   } catch (error) {
     console.error('Error adding group:', error);
+    
+    if (axios.isAxiosError(error)) {
+      if (!error.response) {
+        throw new Error('Network error: Cannot reach the backend server. Please ensure the server is running.');
+      }
+      
+      if (error.response.data && error.response.data.error) {
+        throw new Error(`Error adding group: ${error.response.data.error}`);
+      }
+    }
+    
     throw new Error('Failed to add Telegram group');
   }
 };
@@ -317,15 +342,28 @@ export const updateGroupStatus = async (id: string, active: boolean): Promise<Te
   }
   
   try {
-    // Call backend API
+    // Call backend API with necessary credentials
     const response = await axios.put(`${BACKEND_API_URL}/groups/${id}`, { 
       active,
-      phoneNumber: telegramConfig.phoneNumber
+      phoneNumber: telegramConfig.phoneNumber,
+      apiId: telegramConfig.apiId,
+      apiHash: telegramConfig.apiHash
     });
     
     return response.data;
   } catch (error) {
     console.error('Error updating group status:', error);
+    
+    if (axios.isAxiosError(error)) {
+      if (!error.response) {
+        throw new Error('Network error: Cannot reach the backend server. Please ensure the server is running.');
+      }
+      
+      if (error.response.data && error.response.data.error) {
+        throw new Error(`Error updating group: ${error.response.data.error}`);
+      }
+    }
+    
     throw new Error('Failed to update group status');
   }
 };
@@ -336,16 +374,29 @@ export const removeGroup = async (id: string): Promise<{ success: boolean }> => 
   }
   
   try {
-    // Call backend API
+    // Call backend API with necessary credentials
     const response = await axios.delete(`${BACKEND_API_URL}/groups/${id}`, {
       params: {
-        phoneNumber: telegramConfig.phoneNumber
+        phoneNumber: telegramConfig.phoneNumber,
+        apiId: telegramConfig.apiId,
+        apiHash: telegramConfig.apiHash
       }
     });
     
     return { success: true };
   } catch (error) {
     console.error('Error removing group:', error);
+    
+    if (axios.isAxiosError(error)) {
+      if (!error.response) {
+        throw new Error('Network error: Cannot reach the backend server. Please ensure the server is running.');
+      }
+      
+      if (error.response.data && error.response.data.error) {
+        throw new Error(`Error removing group: ${error.response.data.error}`);
+      }
+    }
+    
     throw new Error('Failed to remove Telegram group');
   }
 };

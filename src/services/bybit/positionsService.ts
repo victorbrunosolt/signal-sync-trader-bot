@@ -1,42 +1,25 @@
 
-import { useBackendOrDirect, apiGet } from './apiService';
+import { get } from './apiService';
 import { isConnectedToBybit } from './authService';
-import { Position, BybitResponse, PositionItem } from '@/types/bybitTypes';
+import { Position } from '@/types/tradingTypes';
 
+// Function to fetch active positions
 export const fetchActivePositions = async (): Promise<Position[]> => {
-  return useBackendOrDirect<Position[]>('/positions', async () => {
-    if (!isConnectedToBybit()) {
-      return [];
-    }
-    
-    try {
-      const endpoint = '/v5/position/list';
-      const params = { category: 'linear', settleCoin: 'USDT' };
-      
-      const result = await apiGet<BybitResponse<{ list: PositionItem[] }>>(endpoint, params);
-      
-      if (result?.result?.list?.length > 0) {
-        return result.result.list.map((pos: PositionItem) => ({
-          id: `${pos.symbol}-${pos.side}-${Date.now()}`,
-          symbol: pos.symbol,
-          side: pos.side,
-          size: parseFloat(pos.size),
-          entryPrice: parseFloat(pos.entryPrice),
-          markPrice: parseFloat(pos.markPrice),
-          currentPrice: parseFloat(pos.markPrice),
-          pnl: parseFloat(pos.unrealisedPnl),
-          pnlPercentage: parseFloat(pos.roe) * 100,
-          roe: parseFloat(pos.roe) * 100,
-          status: 'Active',
-          type: 'Isolated',
-          leverage: parseFloat(pos.leverage)
-        }));
-      }
-      
-      return [];
-    } catch (error) {
-      console.error('Error fetching active positions:', error);
-      throw new Error('Failed to fetch active positions');
-    }
-  }, []);
+  if (!isConnectedToBybit()) {
+    console.warn('Not connected to Bybit, returning mock positions');
+    // Return empty array for positions when not connected
+    return [];
+  }
+  
+  try {
+    const positions = await get<Position[]>('/positions');
+    return positions;
+  } catch (error) {
+    console.error('Error fetching active positions:', error);
+    throw error;
+  }
+};
+
+export default {
+  fetchActivePositions
 };

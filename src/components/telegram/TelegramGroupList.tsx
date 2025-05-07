@@ -29,6 +29,7 @@ const TelegramGroupList = ({
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [localGroups, setLocalGroups] = useState<TelegramGroup[]>(groups);
+  const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
   useEffect(() => {
     setLocalGroups(groups);
@@ -48,7 +49,7 @@ const TelegramGroupList = ({
       console.error("Error refreshing groups:", error);
       toast({
         title: "Refresh failed",
-        description: "Could not refresh group data",
+        description: error instanceof Error ? error.message : "Could not refresh group data",
         variant: "destructive",
       });
     } finally {
@@ -57,6 +58,7 @@ const TelegramGroupList = ({
   };
 
   const handleToggleGroup = async (id: string, active: boolean) => {
+    setActionInProgress(id);
     try {
       await updateGroupStatus(id, active);
       setLocalGroups(prevGroups => prevGroups.map(group => 
@@ -72,13 +74,16 @@ const TelegramGroupList = ({
       console.error("Error toggling group status:", error);
       toast({
         title: "Status update failed",
-        description: "Could not update group status",
+        description: error instanceof Error ? error.message : "Could not update group status",
         variant: "destructive",
       });
+    } finally {
+      setActionInProgress(null);
     }
   };
 
   const handleRemoveGroup = async (id: string) => {
+    setActionInProgress(id);
     try {
       await removeGroup(id);
       setLocalGroups(prevGroups => prevGroups.filter(group => group.id !== id));
@@ -92,9 +97,11 @@ const TelegramGroupList = ({
       console.error("Error removing group:", error);
       toast({
         title: "Removal failed",
-        description: "Could not remove the group",
+        description: error instanceof Error ? error.message : "Could not remove the group",
         variant: "destructive",
       });
+    } finally {
+      setActionInProgress(null);
     }
   };
 
@@ -157,14 +164,20 @@ const TelegramGroupList = ({
                     <Switch 
                       checked={group.active} 
                       onCheckedChange={(checked) => handleToggleGroup(group.id, checked)}
+                      disabled={actionInProgress === group.id}
                     />
-                    <span className="text-sm">{group.active ? 'Active' : 'Inactive'}</span>
+                    <span className="text-sm">
+                      {actionInProgress === group.id ? 
+                        'Processing...' : 
+                        group.active ? 'Active' : 'Inactive'}
+                    </span>
                   </div>
                   
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => handleRemoveGroup(group.id)}
+                    disabled={actionInProgress === group.id}
                     className="text-destructive hover:text-destructive hover:bg-destructive/10"
                   >
                     <Trash2 className="h-4 w-4" />
