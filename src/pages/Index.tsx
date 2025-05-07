@@ -29,7 +29,10 @@ const Index = () => {
 
   return (
     <MainLayout>
-      <DashboardHeader />
+      <DashboardHeader 
+        title="Trading Dashboard" 
+        description="Overview of your trading performance and positions"
+      />
       
       <DashboardAlerts 
         isExchangeConnected={isExchangeConnected}
