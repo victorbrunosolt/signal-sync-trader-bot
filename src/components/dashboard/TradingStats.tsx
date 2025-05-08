@@ -15,6 +15,15 @@ export interface TradingStatsProps {
 const TradingStats = ({ stats, isLoading, error }: TradingStatsProps) => {
   // Check for backend connection errors
   const isBackendError = error && error.includes('Network error');
+  
+  // Default values to prevent accessing properties on undefined
+  const safeStats: TradingStatsType = stats || {
+    winRate: 0,
+    profitFactor: 0,
+    averageWin: 0,
+    averageLoss: 0,
+    tradesCount: 0
+  };
 
   return (
     <Card>
@@ -44,37 +53,37 @@ const TradingStats = ({ stats, isLoading, error }: TradingStatsProps) => {
               <p className="text-sm text-muted-foreground mb-1">Win Rate</p>
               <p className={cn(
                 "text-xl font-semibold",
-                stats.winRate > 50 ? "text-green-500 dark:text-green-400" : 
-                stats.winRate < 50 ? "text-red-500 dark:text-red-400" : ""
+                safeStats.winRate > 50 ? "text-green-500 dark:text-green-400" : 
+                safeStats.winRate < 50 ? "text-red-500 dark:text-red-400" : ""
               )}>
-                {stats.winRate.toFixed(1)}%
+                {safeStats.winRate.toFixed(1)}%
               </p>
             </div>
             <div className="p-3 border rounded-md">
               <p className="text-sm text-muted-foreground mb-1">Profit Factor</p>
               <p className={cn(
                 "text-xl font-semibold",
-                stats.profitFactor > 1 ? "text-green-500 dark:text-green-400" : 
-                stats.profitFactor < 1 ? "text-red-500 dark:text-red-400" : ""
+                safeStats.profitFactor > 1 ? "text-green-500 dark:text-green-400" : 
+                safeStats.profitFactor < 1 ? "text-red-500 dark:text-red-400" : ""
               )}>
-                {stats.profitFactor.toFixed(2)}
+                {safeStats.profitFactor.toFixed(2)}
               </p>
             </div>
             <div className="p-3 border rounded-md">
               <p className="text-sm text-muted-foreground mb-1">Average Win</p>
               <p className="text-xl font-semibold text-green-500 dark:text-green-400">
-                ${stats.averageWin.toFixed(2)}
+                ${safeStats.averageWin.toFixed(2)}
               </p>
             </div>
             <div className="p-3 border rounded-md">
               <p className="text-sm text-muted-foreground mb-1">Average Loss</p>
               <p className="text-xl font-semibold text-red-500 dark:text-red-400">
-                -${Math.abs(stats.averageLoss).toFixed(2)}
+                -${Math.abs(safeStats.averageLoss).toFixed(2)}
               </p>
             </div>
             <div className="p-3 border rounded-md col-span-2">
               <p className="text-sm text-muted-foreground mb-1">Total Trades</p>
-              <p className="text-xl font-semibold">{stats.tradesCount}</p>
+              <p className="text-xl font-semibold">{safeStats.tradesCount}</p>
             </div>
           </div>
         )}

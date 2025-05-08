@@ -3,16 +3,20 @@ import { useBackendOrDirect, apiGet } from './apiService';
 import { isConnectedToBybit } from './authService';
 import { TradingStats, PerformanceData, BybitResponse, ExecutionItem } from '@/types/bybitTypes';
 
+// Default trading stats object for fallback
+const defaultTradingStats: TradingStats = {
+  winRate: 0,
+  profitFactor: 0,
+  averageWin: 0,
+  averageLoss: 0,
+  tradesCount: 0
+};
+
 export const fetchTradingStats = async (): Promise<TradingStats> => {
   return useBackendOrDirect<TradingStats>('/stats', async () => {
     if (!isConnectedToBybit()) {
-      return {
-        winRate: 0,
-        profitFactor: 0,
-        averageWin: 0,
-        averageLoss: 0,
-        tradesCount: 0
-      };
+      console.warn('Not connected to Bybit, returning default trading stats');
+      return { ...defaultTradingStats };
     }
 
     try {
@@ -59,24 +63,12 @@ export const fetchTradingStats = async (): Promise<TradingStats> => {
         };
       }
       
-      return {
-        winRate: 0,
-        profitFactor: 0,
-        averageWin: 0,
-        averageLoss: 0,
-        tradesCount: 0
-      };
+      return { ...defaultTradingStats };
     } catch (error) {
       console.error('Error fetching trading stats:', error);
       throw new Error('Failed to fetch trading stats');
     }
-  }, {
-    winRate: 0,
-    profitFactor: 0,
-    averageWin: 0,
-    averageLoss: 0,
-    tradesCount: 0
-  });
+  }, { ...defaultTradingStats });
 };
 
 export const fetchPerformanceData = async (timeframe: 'daily' | 'weekly' | 'monthly' | 'yearly' = 'weekly'): Promise<PerformanceData> => {

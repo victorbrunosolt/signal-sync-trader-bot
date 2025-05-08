@@ -10,6 +10,7 @@ import {
 } from '@/services/bybitService';
 import { useToast } from '@/hooks/use-toast';
 import { checkBackendHealth } from '@/services/bybit/apiService';
+import { TradingStats } from '@/types/tradingTypes';
 
 export const useDashboardData = () => {
   const { toast } = useToast();
@@ -95,6 +96,15 @@ export const useDashboardData = () => {
     }
   });
 
+  // Default trading stats to prevent undefined values
+  const defaultTradingStats: TradingStats = {
+    winRate: 0,
+    profitFactor: 0,
+    averageWin: 0,
+    averageLoss: 0,
+    tradesCount: 0
+  };
+
   // React Query for trading stats
   const statsQuery = useQuery({
     queryKey: ['tradingStats'],
@@ -143,7 +153,7 @@ export const useDashboardData = () => {
     positions: positionsQuery.data || [],
     isPositionsLoading: positionsQuery.isLoading,
     positionsError: positionsQuery.error,
-    tradingStats: statsQuery.data,
+    tradingStats: statsQuery.data || defaultTradingStats, // Use default if data is undefined
     isStatsLoading: statsQuery.isLoading,
     statsError: statsQuery.error,
     performanceData: performanceQuery.data,
